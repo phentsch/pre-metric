@@ -18,3 +18,7 @@ voila hentsch_manifold_explorer.ipynb
 
 - [Hentsch Manifold Explorer (Voila on Binder)](https://mybinder.org/v2/gh/phentsch/pre-metric/HEAD?urlpath=voila/render/hentsch_manifold_explorer.ipynb)
 - [Phase Portraits Explorer (Voila on Binder)](https://mybinder.org/v2/gh/phentsch/pre-metric/HEAD?urlpath=voila/render/phase_portraits_explorer.ipynb)
+## Launch with Binder
+
+[![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/YOUR_USERNAME/YOUR_REPO/HEAD?urlpath=voila/render/hentsch_manifold_explorer.ipynb)
+"""
