@@ -1,8 +1,8 @@
 #!/bin/bash
 
-# Start Voilà on the assigned port, serving your notebook
+# Launch Voilà correctly for Render
 voila hentsch_manifold_explorer.ipynb \
-  --port=$PORT \
+  --port="$PORT" \
   --no-browser \
   --Voila.base_url="/" \
-  --Voila.enable_nbextensions=True
+  --Voila.ip=0.0.0.0
