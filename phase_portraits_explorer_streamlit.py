@@ -233,7 +233,7 @@ def make_phase_plot(
     ax.set_ylim(centre[1] - half, centre[1] + half)
     ax.set_xlabel(r"$v_1$")
     ax.set_ylabel(r"$v_2$")
-    ax.set_title(rf"$\epsilon = {eps:.3f},\quad \theta = {theta/np.pi:.2f}\pi, \quad scalar: {color_mode}$")
+    ax.set_title(rf"$ε = {eps:.3f},\quad θ = {theta/np.pi:.2f}π, \quad scalar: {color_mode}$")
 
     # ---------------------------------------------------------------
     #  Add visual aids to the plot
@@ -274,7 +274,7 @@ def make_phase_plot(
                             ec='darkred', lw=1, ls=':', alpha=0.6,
                             fill=False, zorder=2))
     ax.annotate(
-        r"$\lambda$-circle  $(\rho = 1)$",
+        r"λ-circle  (ρ = 1)",
         xy=(0, 1),
         xytext=(0, 14),
         textcoords="offset points",
