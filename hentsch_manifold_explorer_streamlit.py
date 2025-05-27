@@ -282,7 +282,7 @@ def make_plot(
     ax.set_zlabel(z_label)
     ax.view_init(elev=elevation, azim=azimuth)
     ax.set_title(
-    f"Hentsch Manifold ( θ = {theta_deg:.1f}°,  ε = {epsilon:.3f},  Q = {quadratic_value:.2f},  scale = {scale_factor:.2f} )",
+    f"θ = {theta_deg:.1f}°,  ε = {epsilon:.3f},  Q = {quadratic_value:.2f},  scale = {scale_factor:.2f}",
     fontsize=6, loc='center'
 )
 

@@ -233,7 +233,7 @@ def make_phase_plot(
     ax.set_ylim(centre[1] - half, centre[1] + half)
     ax.set_xlabel(r"$v_1$")
     ax.set_ylabel(r"$v_2$")
-    ax.set_title(rf"Hentsch Phase Portrait with $\quad \epsilon = {eps:.3f},\quad \theta = {theta/np.pi:.2f}\pi, \quad scalar: {color_mode} $")
+    ax.set_title(rf"\epsilon = {eps:.3f},\quad \theta = {theta/np.pi:.2f}\pi, \quad scalar: {color_mode} $")
 
     # ---------------------------------------------------------------
     #  Add visual aids to the plot
@@ -457,16 +457,16 @@ def main():
     st.sidebar.header("Diagnostic Scalar")
     color_mode = st.sidebar.selectbox("Colour mode", ["cosine", "speed", "angle", "time", "accel"])
     st.sidebar.header("Parameters")
-    eps = st.sidebar.slider("ε", 0.0, 4.0, value=0.4082, step=0.001)
-    theta = st.sidebar.slider("θ (rad)", 0.0, float(2*np.pi), value=0.0, step=0.01)
+    eps = st.sidebar.slider("shear strength ε", 0.0, 4.0, value=0.4082, step=0.001)
+    theta = st.sidebar.slider("shear direction θ (rad)", 0.0, float(2*np.pi), value=0.0, step=0.01)
     st.sidebar.markdown("### Settings")
-    ngrid = st.sidebar.slider("Grid resolution", 10, 50, value=24, step=1)
-    t_max = st.sidebar.slider("t_max", 1.0, 100.0, value=20.0, step=1.0)
-    nt = st.sidebar.slider("nt", 50, 2000, value=300, step=50)
-    seed_base = st.sidebar.slider("Seeds", 1, 720, value=180, step=1)
-    seed_radius = st.sidebar.slider("Seed radius", 0.01, 0.2, value=0.05, step=0.005)
-    jitter = st.sidebar.slider("Jitter", 0.0, 0.3, value=0.0, step=0.01)
-    view_span = st.sidebar.slider("View span", 1.0, 10.0, value=5.0, step=0.1)
+    ngrid = st.sidebar.slider("vector field density", 10, 50, value=24, step=1)
+    t_max = st.sidebar.slider("maximum time (trajectory length)", 1.0, 100.0, value=20.0, step=1.0)
+    nt = st.sidebar.slider("time steps (trajectory resolution)", 50, 2000, value=300, step=50)
+    seed_base = st.sidebar.slider("trajectory seeds", 1, 720, value=180, step=1)
+    seed_radius = st.sidebar.slider("seed distance from null point", 0.01, 0.2, value=0.05, step=0.005)
+    jitter = st.sidebar.slider("jitter (seeding noise)", 0.0, 0.3, value=0.0, step=0.01)
+    view_span = st.sidebar.slider("View span (zoom)", 1.0, 10.0, value=5.0, step=0.1)
     make_phase_plot(
         eps, theta,
         ngrid=ngrid, t_max=t_max, nt=nt,
