@@ -1,7 +1,6 @@
-voila>=0.4.0
-notebook
-ipywidgets
+streamlit
 numpy
-matplotlib
 scipy
+matplotlib
 scikit-image
+plotly

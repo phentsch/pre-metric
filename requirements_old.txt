@@ -1,0 +1,7 @@
+voila>=0.4.0
+notebook
+ipywidgets
+numpy
+matplotlib
+scipy
+scikit-image
