@@ -114,20 +114,18 @@ def vec_field(u1: np.ndarray, u2: np.ndarray, eps: float, theta: float = 0.0):
 # ----------------------------------------------------------------------
 #  Phase-portrait plotting function
 # ----------------------------------------------------------------------
-def make_phase_plot(eps: float,
-                    theta: float,
-                    outfile: Path,
-                    *,
-                    ngrid: int = 25,
-                    t_max: float = 200.0,
-                    nt: int = 300,
-                    seed_base: float = 2,
-                    seed_radius: float = 0.05,
-                    jitter: float = 0.1,
-                    view_span: float = 5.0,
-                    color_mode: str = "cosine",
-                    save_fig: bool = False,
-                    interactive: bool = True):
+def make_phase_plot(
+    eps: float,
+    theta: float,
+    ngrid: int = 25,
+    t_max: float = 200.0,
+    nt: int = 300,
+    seed_base: float = 2,
+    seed_radius: float = 0.05,
+    jitter: float = 0.1,
+    view_span: float = 5.0,
+    color_mode: str = "cosine",
+):
     """
     Generate a phase portrait of the projected flow on the Hentsch screen
     for a given value of ε and θ.
@@ -449,86 +447,29 @@ def make_phase_plot(eps: float,
     #  Save the figure
     # --------------------------------------------------------------
     fig.tight_layout() # adjust layout to fit
-    if interactive:
-        import streamlit as st
-        st.pyplot(fig)
-    elif save_fig:
-        fig.savefig(outfile, dpi=300) # save as PNG
-        fig.savefig(outfile.with_suffix('.svg')) # save as SVG
-        plt.close(fig) # close the figure to free memory
+    st.pyplot(fig)
 
 
-# ----------------------------------------------------------------------
-#  Main driver - multiple regimes
-# ----------------------------------------------------------------------
-# def main():
-#     color_mode = "cosine"   # "cosine", "speed", "angle", "time", "accel"
-#     eps_c = 1.0 / SQRT6
-#     eps_values = [
-#         0.33*eps_c,
-#         1.0*eps_c,
-#         2.0*eps_c,
-#         4.0*eps_c,
-#         6.0*eps_c,
-#     ]
-#     theta = np.pi/3 # shear direction
-#     for i, eps in enumerate(eps_values, 1):
-#         fname = f"fig_phase_{color_mode}_{i}.png"
-#         make_phase_plot(
-#             eps, theta, FIGDIR / fname,
-#             ngrid=25,
-#             t_max=16,
-#             nt=1000,
-#             seed_base=5,
-#             seed_radius=0.05,
-#             jitter=0,
-#             view_span=7.0,
-#             color_mode=color_mode,
-#             save_fig=False,
-#             interactive=False
-#         )
 
+# --- Streamlit UI in main() ---
+def main():
+    eps = st.sidebar.slider("ε", 0.0, 4.0, value=0.4082, step=0.001)
+    theta = st.sidebar.slider("θ (rad)", 0.0, float(2*np.pi), value=0.0, step=0.01)
+    ngrid = st.sidebar.slider("Grid resolution", 10, 50, value=24, step=1)
+    t_max = st.sidebar.slider("t_max", 1.0, 100.0, value=20.0, step=1.0)
+    nt = st.sidebar.slider("nt", 50, 2000, value=300, step=50)
+    seed_base = st.sidebar.slider("Seeds", 1, 720, value=180, step=1)
+    seed_radius = st.sidebar.slider("Seed radius", 0.01, 0.2, value=0.05, step=0.005)
+    jitter = st.sidebar.slider("Jitter", 0.0, 0.3, value=0.0, step=0.01)
+    view_span = st.sidebar.slider("View span", 1.0, 10.0, value=5.0, step=0.1)
+    color_mode = st.sidebar.selectbox("Colour mode", ["cosine", "speed", "angle", "time", "accel"])
+    make_phase_plot(
+        eps, theta,
+        ngrid=ngrid, t_max=t_max, nt=nt,
+        seed_base=seed_base, seed_radius=seed_radius, jitter=jitter,
+        view_span=view_span, color_mode=color_mode,
+    )
 
-# --- Notebook widget interface ---
-
-# --- Streamlit UI ---
-eps = st.sidebar.slider("ε", 0.0, 4.0, value=0.4082, step=0.001)
-theta = st.sidebar.slider("θ (rad)", 0.0, float(2*np.pi), value=0.0, step=0.01)
-ngrid = st.sidebar.slider("Grid resolution", 10, 50, value=24, step=1)
-t_max = st.sidebar.slider("t_max", 1.0, 100.0, value=20.0, step=1.0)
-nt = st.sidebar.slider("nt", 50, 2000, value=300, step=50)
-seed_base = st.sidebar.slider("Seeds", 1, 720, value=180, step=1)
-seed_radius = st.sidebar.slider("Seed radius", 0.01, 0.2, value=0.05, step=0.005)
-jitter = st.sidebar.slider("Jitter", 0.0, 0.3, value=0.0, step=0.01)
-view_span = st.sidebar.slider("View span", 1.0, 10.0, value=5.0, step=0.1)
-color_mode = st.sidebar.selectbox("Colour mode", ["cosine", "speed", "angle", "time", "accel"])
-
-from io import BytesIO
-fig_out = BytesIO()
-import sys
-import types
-import __main__
-import builtins
-import os
-
-import matplotlib.pyplot as plt
-import matplotlib
-
-imported_st = st
-
-import matplotlib
-import matplotlib.pyplot as plt
-
-import sys
-out = None
-ui = None
 
 if __name__ == "__main__":
-    # Run the phase plot and display appropriately
-    make_phase_plot(eps, theta, Path(), ngrid=ngrid, t_max=t_max, nt=nt,
-                    seed_base=seed_base, seed_radius=seed_radius, jitter=jitter,
-                    view_span=view_span, color_mode=color_mode,
-                    save_fig=False, interactive=True)
-    # Only display in notebook if not running in Streamlit
-    if not getattr(st, "_is_running_with_streamlit", False):
-        display(ui, out)
+    main()
