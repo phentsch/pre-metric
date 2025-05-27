@@ -1,3 +1,6 @@
+# === this explorer can be operated at ===
+# https://hentsch-phase-portraits.streamlit.app
+
 #!/usr/bin/env python
 # coding: utf-8
 

@@ -1,3 +1,6 @@
+# === this explorer can be operated at ===
+# https://hentsch-pre-metric.streamlit.app
+
 #!/usr/bin/env python
 # coding: utf-8
 
