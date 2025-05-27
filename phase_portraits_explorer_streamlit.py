@@ -454,9 +454,12 @@ def make_phase_plot(
 # --- Streamlit UI in main() ---
 def main():
     st.title("Screen Phase Portrait Explorer")
+    st.sidebar.header("Diagnostic Scalar")
+    color_mode = st.sidebar.selectbox("Colour mode", ["cosine", "speed", "angle", "time", "accel"])
     st.sidebar.header("Parameters")
     eps = st.sidebar.slider("ε", 0.0, 4.0, value=0.4082, step=0.001)
     theta = st.sidebar.slider("θ (rad)", 0.0, float(2*np.pi), value=0.0, step=0.01)
+    st.sidebar.markdown("### Settings")
     ngrid = st.sidebar.slider("Grid resolution", 10, 50, value=24, step=1)
     t_max = st.sidebar.slider("t_max", 1.0, 100.0, value=20.0, step=1.0)
     nt = st.sidebar.slider("nt", 50, 2000, value=300, step=50)
@@ -464,7 +467,6 @@ def main():
     seed_radius = st.sidebar.slider("Seed radius", 0.01, 0.2, value=0.05, step=0.005)
     jitter = st.sidebar.slider("Jitter", 0.0, 0.3, value=0.0, step=0.01)
     view_span = st.sidebar.slider("View span", 1.0, 10.0, value=5.0, step=0.1)
-    color_mode = st.sidebar.selectbox("Colour mode", ["cosine", "speed", "angle", "time", "accel"])
     make_phase_plot(
         eps, theta,
         ngrid=ngrid, t_max=t_max, nt=nt,
