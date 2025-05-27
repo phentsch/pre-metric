@@ -460,7 +460,7 @@ def main():
     eps = st.sidebar.slider("shear strength ε", 0.0, 4.0, value=0.4082, step=0.001)
     theta = st.sidebar.slider("shear direction θ (rad)", 0.0, float(2*np.pi), value=0.0, step=0.01)
     st.sidebar.markdown("### Settings")
-    ngrid = st.sidebar.slider("vector field density", 0, 50, value=24, step=1)
+    ngrid = st.sidebar.slider("vector field density", 1, 50, value=24, step=1)
     t_max = st.sidebar.slider("maximum time (trajectory length)", 1.0, 100.0, value=20.0, step=1.0)
     nt = st.sidebar.slider("time steps (trajectory resolution)", 50, 2000, value=300, step=50)
     seed_base = st.sidebar.slider("trajectory seeds", 1, 720, value=100, step=1)
