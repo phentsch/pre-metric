@@ -38,7 +38,6 @@
 # In[1]:
 
 
-from IPython.display import display  # For notebook use
 # --- Phase portraits of the projected flow on the Hentsch screen ---
 from pathlib import Path
 import numpy as np
