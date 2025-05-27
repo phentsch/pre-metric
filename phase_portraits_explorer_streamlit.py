@@ -216,7 +216,7 @@ def make_phase_plot(
     # quiver coloured by original speed magnitude
     q = ax.quiver(X, Y, U, V, speed,
                 cmap='viridis',
-                alpha=2/3,
+                alpha=0.3,
                 norm=colors.Normalize(vmin=0.0, vmax=speed_max),
                 pivot='tail',
                 angles='xy',
