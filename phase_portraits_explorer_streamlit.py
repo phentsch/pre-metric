@@ -453,6 +453,8 @@ def make_phase_plot(
 
 # --- Streamlit UI in main() ---
 def main():
+    st.title("Screen Phase Portrait Explorer")
+    st.sidebar.header("Parameters")
     eps = st.sidebar.slider("ε", 0.0, 4.0, value=0.4082, step=0.001)
     theta = st.sidebar.slider("θ (rad)", 0.0, float(2*np.pi), value=0.0, step=0.01)
     ngrid = st.sidebar.slider("Grid resolution", 10, 50, value=24, step=1)
