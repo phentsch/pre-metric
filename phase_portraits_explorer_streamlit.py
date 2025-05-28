@@ -234,8 +234,8 @@ def make_phase_plot(
     # set limits for the plot
     ax.set_xlim(centre[0] - half, centre[0] + half)
     ax.set_ylim(centre[1] - half, centre[1] + half)
-    ax.set_xlabel(r"$v_1$")
-    ax.set_ylabel(r"$v_2$")
+    ax.set_xlabel("v₁")
+    ax.set_ylabel("v₂")
     ax.set_title(f"ε = {eps:.3f}, θ = {theta/np.pi:.2f}π, scalar: {color_mode}")
 
     # ---------------------------------------------------------------
