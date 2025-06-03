@@ -1,7 +1,0 @@
-services:
-  - type: web
-    name: hentsch-manifold-voila
-    runtime: python
-    buildCommand: pip install -r requirements.txt
-    startCommand: ./setup.sh
-    plan: free
