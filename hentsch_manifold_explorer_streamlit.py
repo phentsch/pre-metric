@@ -653,7 +653,7 @@ with st.sidebar.expander("Framework", expanded=False):
 with st.sidebar.expander("Quadratic Cone", expanded=True):
     show_cone = st.checkbox("Show Cone Surface", value=True)
     show_wireframe = st.checkbox("Show Cone Wireframe", value=True)
-    quadratic_value = st.number_input("Q = n Foliation Level", -0.99, 0.99, value=0.0, step=0.001, format="%.3f",)
+    quadratic_value = st.number_input("Q = n Foliation Level", -0.99, 0.99, value=0.0, step=0.005, format="%.3f",)
     scale_factor = st.slider("Scale Factor", 1.0, 100.0, value=1.0, step=0.01)
     show_screen_planes = st.checkbox("Show Screen Plane", value=False)
     s_value = st.slider("Screen Plane s-value", -1.0, 1.0, value=0.0, step=0.01)
