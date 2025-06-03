@@ -57,7 +57,15 @@ import matplotlib.colors as mcolors
 import numpy.random as npr
 from numpy.linalg import inv
 import streamlit as st
+
 st.set_page_config(layout="wide")
+# ----------------------------------------------------------------------
+# Safe initialisation of all Session State keys that callbacks rely on.
+# These lines run on *every* script execution **before** any callbacks
+# are triggered, so the keys are guaranteed to exist.
+# ----------------------------------------------------------------------
+for _k in ("quadratic_value", "q_box", "q_slider"):
+    st.session_state.setdefault(_k, 0.0)
 
 # Small value to avoid division by zero or overflow
 EPS = 1e-12  # small value to avoid division by zero or overflow
@@ -645,23 +653,17 @@ with st.sidebar.expander("Framework", expanded=False):
 with st.sidebar.expander("Quadratic Cone", expanded=True):
     show_cone = st.checkbox("Show Cone Surface", value=True)
     show_wireframe = st.checkbox("Show Cone Wireframe", value=True)
-    # ----- initialise state once -----
-    if "quadratic_value" not in st.session_state:
-        st.session_state.quadratic_value = 0.0
-    if "q_box" not in st.session_state:
-        st.session_state.q_box = st.session_state.quadratic_value
-    if "q_slider" not in st.session_state:
-        st.session_state.q_slider = st.session_state.quadratic_value
 
     def box_changed():
-        val = st.session_state.q_box
-        st.session_state.quadratic_value = val
-        st.session_state.q_slider = val      # keep slider in sync
+        # fetch whichever key is present; default to 0.0
+        val = st.session_state.get("q_box", st.session_state.get("quadratic_value", 0.0))
+        st.session_state["quadratic_value"] = val
+        st.session_state["q_slider"] = val      # keep slider in sync
 
     def slider_changed():
-        val = st.session_state.q_slider
-        st.session_state.quadratic_value = val
-        st.session_state.q_box = val         # keep number box in sync
+        val = st.session_state.get("q_slider", st.session_state.get("quadratic_value", 0.0))
+        st.session_state["quadratic_value"] = val
+        st.session_state["q_box"] = val         # keep number box in sync
 
     # ----- widgets -----
     q_box = st.number_input(
