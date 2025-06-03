@@ -666,9 +666,12 @@ with st.sidebar.expander("Quadratic Cone", expanded=True):
         st.session_state["q_box"] = val         # keep number box in sync
 
     # ----- widgets -----
+    val = st.session_state.get("quadratic_value", 0.0)
+
     q_box = st.number_input(
         "Exact n value",
         -0.99, 0.99,
+        value=val,
         key="q_box",
         step=0.001,
         format="%.3f",
@@ -678,13 +681,14 @@ with st.sidebar.expander("Quadratic Cone", expanded=True):
     q_slider = st.slider(
         "Q = n Foliation Level",
         -0.99, 0.99,
+        value=val,
         key="q_slider",
-        step=0.001,          # same resolution
+        step=0.001,
         format="%.3f",
         on_change=slider_changed,
     )
 
-    quadratic_value = st.session_state.quadratic_value
+    quadratic_value = val
     scale_factor = st.slider("Scale Factor", 1.0, 100.0, value=1.0, step=0.01)
     show_screen_planes = st.checkbox("Show Screen Plane", value=False)
     s_value = st.slider("Screen Plane s-value", -1.0, 1.0, value=0.0, step=0.01)
