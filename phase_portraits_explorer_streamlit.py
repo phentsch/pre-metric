@@ -67,7 +67,16 @@ st.set_page_config(layout="wide")
 # ----------------------------------------------------------------------
 #  Constants
 # ----------------------------------------------------------------------
+# ----------------------------------------------------------------------
+#  Constants
+# ----------------------------------------------------------------------
 SQRT6 = np.sqrt(6.0)
+# ----------------------------------------------------------------------
+#  Numerical safety thresholds (to prevent overflow/invalid warnings)
+# ----------------------------------------------------------------------
+OVERFLOW_LIMIT = 1e6      # clip trajectory coordinates to ± this value
+RHO_SAT = 1e5             # cap radial distance used inside κ(ρ)
+SPEED_SAT = 1e6           # cap speed magnitude for colour‑scaling
 # FIGDIR = Path(__file__).with_suffix('').parent / 'phase_portraits'
 # FIGDIR.mkdir(parents=True, exist_ok=True)
 
@@ -90,7 +99,7 @@ def truncate_cmap(
     """
     if not (0.0 <= min_val < max_val <= 1.0):
         raise ValueError("min_val and max_val must satisfy 0 ≤ min < max ≤ 1")
-    parent_cmap = cm.get_cmap(cmap_name, n)
+    parent_cmap = plt.get_cmap(cmap_name, n)  # use modern API; avoids deprecation
     new_colors = parent_cmap(np.linspace(min_val, max_val, n))
     return colors.LinearSegmentedColormap.from_list(
         f"{cmap_name}_trunc_{min_val:.2f}_{max_val:.2f}", new_colors, N=n
@@ -124,8 +133,12 @@ def vec_field(u1: np.ndarray, u2: np.ndarray, eps: float, theta: float = 0.0):
         Second component of the vector field.
     """
     rho = np.hypot(u1, u2)
-    kappa = rho / SQRT6  # κ(ρ) = ρ / √6
-    return (kappa * u1) + (eps * np.cos(theta)), (kappa * u2) + (eps * np.sin(theta))
+    # Prevent κ(ρ) from becoming unreasonably large
+    rho_clip = np.clip(rho, 0.0, RHO_SAT)
+    kappa = rho_clip / SQRT6
+    v1 = kappa * u1 + eps * np.cos(theta)
+    v2 = kappa * u2 + eps * np.sin(theta)
+    return v1, v2
 
 
 # ----------------------------------------------------------------------
@@ -220,6 +233,7 @@ def make_phase_plot(
     X, Y = np.meshgrid(x, y)  # meshgrid for quiver plot
     U_raw, V_raw = vec_field(X, Y, eps, theta)  # raw vector field
     speed = np.hypot(U_raw, V_raw)
+    speed = np.clip(speed, 0.0, SPEED_SAT)
     speed_max = speed.max() or 1.0  # avoid division by zero
 
     # normalise quiver vectors to unit length for uniform arrow size,
@@ -481,6 +495,9 @@ def make_phase_plot(
             v1, v2 = vec_field(u1, u2, eps, theta)  # vector field
             u1 += h * v1
             u2 += h * v2
+            # Clip coordinates to avoid runaway values that cause overflow
+            u1 = np.clip(u1, -OVERFLOW_LIMIT, OVERFLOW_LIMIT)
+            u2 = np.clip(u2, -OVERFLOW_LIMIT, OVERFLOW_LIMIT)
             t += h
             traj[k] = (u1, u2)
             # ----- directional cosine for colour -----
@@ -505,23 +522,19 @@ def make_phase_plot(
             acc_seg = np.hypot(v1 - v1_prev, v2 - v2_prev) / h
             scal_acc[k - 1] = acc_seg
             accel_max_traj = max(accel_max_traj, acc_seg)
-            # ----- affine‑shifted curvature κ(u) = uᵀ S u / |u|² -----
+            # ----- affine‑shifted curvature κ(u) = uᵀ S u / |u|²  (scale‑safe) -----
             cos_t, sin_t = np.cos(theta), np.sin(theta)
-            # Raw R-matrix components
             R11 = eps / np.sqrt(6.0) * (4 * cos_t**2 + sin_t**2)
             R22 = eps / np.sqrt(6.0) * (4 * sin_t**2 + cos_t**2)
             R12 = eps / np.sqrt(6.0) * 3 * cos_t * sin_t
-            # Trace term and affine shift
             trace_R = 5 * eps / np.sqrt(6.0)
             shift = (1.0 / 6.0) - trace_R / 3.0
-            # Components of S = R - Tr/3 I + 1/6 I
-            S11 = R11 + shift
-            S22 = R22 + shift
-            S12 = R12
-            # Quadratic form
-            num = S11 * u1 * u1 + 2 * S12 * u1 * u2 + S22 * u2 * u2
-            den = (u1 * u1 + u2 * u2) + 1e-12
-            scal_curv[k - 1] = num / den
+            S11, S22, S12 = R11 + shift, R22 + shift, R12
+
+            r2 = u1 * u1 + u2 * u2 + 1e-12          # avoid div‑by‑zero
+            inv_r = 1.0 / np.sqrt(r2)
+            nx, ny = u1 * inv_r, u2 * inv_r          # normalised coordinate
+            scal_curv[k - 1] = S11 * nx * nx + 2 * S12 * nx * ny + S22 * ny * ny
             v1_prev, v2_prev = v1, v2  # update for next step
         global_curv_values.extend(scal_curv.tolist())
         segs = np.column_stack([traj[:-1], traj[1:]]).reshape(-1, 2, 2)
