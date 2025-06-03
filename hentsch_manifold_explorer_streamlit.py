@@ -651,9 +651,9 @@ with st.sidebar.expander("Quadratic Cone", expanded=True):
         "Exact n value",
         min_value=quadratic_value_min,
         max_value=quadratic_value_max,
-        value=0.0,
+        value=0.1,
         step=0.001,
-        format="%.6f",
+        format="%.3f",
     )
     quadratic_value_slider = st.slider(
         "Q = n Foliation Level",
