@@ -664,7 +664,7 @@ with st.sidebar.expander("Quadratic Cone", expanded=True):
         format="%.2f",
     )
     # keep the two widgets in sync:
-    eps = quadratic_value_slider if abs(quadratic_value_slider - quadratic_value_box) > 1e-9 else quadratic_value_box
+    quadratic_value = quadratic_value_slider if abs(quadratic_value_slider - quadratic_value_box) > 1e-9 else quadratic_value_box
     scale_factor = st.slider("Scale Factor", 1.0, 100.0, value=1.0, step=0.01)
     show_screen_planes = st.checkbox("Show Screen Plane", value=False)
     s_value = st.slider("Screen Plane s-value", -1.0, 1.0, value=0.0, step=0.01)
