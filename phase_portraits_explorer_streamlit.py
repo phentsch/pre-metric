@@ -1,8 +1,20 @@
-# === this explorer can be operated at ===
-# https://hentsch-phase-portraits.streamlit.app
-
 #!/usr/bin/env python
 # coding: utf-8
+
+    # Run the Streamlit app
+    # streamlit run phase_portraits_explorer_streamlit.py
+    # Note: To run this script, use the command:
+    # streamlit run phase_portraits_explorer_streamlit.py
+    # in the terminal from the directory containing this file.
+    # This will start a local server and open the app in your web browser.
+    # The app will automatically update when you change the parameters in the sidebar.
+    # Note: The app requires Matplotlib, NumPy, and Streamlit to be installed.
+    # You can install them using pip:
+    # pip install matplotlib numpy streamlit
+    # Note: The app will not run in Jupyter Notebook or JupyterLab directly.
+    # It is designed to be run as a standalone Streamlit app.
+    # Note: The app will not save any figures to disk.
+    # It will only display the figures in the Streamlit app.
 
 # ## **Hentsch Screen Phase Portrait Explorer**
 # ---
@@ -43,11 +55,13 @@
 
 # --- Phase portraits of the projected flow on the Hentsch screen ---
 from pathlib import Path
+
+import matplotlib.pyplot as plt  # ensure plt is matplotlib, not overwritten
 import numpy as np
-import matplotlib.pyplot as plt
-from matplotlib.collections import LineCollection
-from matplotlib import cm, colors
 import streamlit as st
+from matplotlib import cm, colors
+from matplotlib.collections import LineCollection
+
 st.set_page_config(layout="wide")
 
 # ----------------------------------------------------------------------
@@ -57,13 +71,13 @@ SQRT6 = np.sqrt(6.0)
 # FIGDIR = Path(__file__).with_suffix('').parent / 'phase_portraits'
 # FIGDIR.mkdir(parents=True, exist_ok=True)
 
+
 # ----------------------------------------------------------------------
 #  Truncate a colormap to a specific range
 # ----------------------------------------------------------------------
-def truncate_cmap(cmap_name: str,
-                  min_val: float = 0.0,
-                  max_val: float = 1.0,
-                  n: int = 256) -> colors.Colormap:
+def truncate_cmap(
+    cmap_name: str, min_val: float = 0.0, max_val: float = 1.0, n: int = 256
+) -> colors.Colormap:
     """
     Parameters
     ----------
@@ -77,12 +91,11 @@ def truncate_cmap(cmap_name: str,
     if not (0.0 <= min_val < max_val <= 1.0):
         raise ValueError("min_val and max_val must satisfy 0 ≤ min < max ≤ 1")
     parent_cmap = cm.get_cmap(cmap_name, n)
-    new_colors  = parent_cmap(np.linspace(min_val, max_val, n))
+    new_colors = parent_cmap(np.linspace(min_val, max_val, n))
     return colors.LinearSegmentedColormap.from_list(
-        f'{cmap_name}_trunc_{min_val:.2f}_{max_val:.2f}',
-        new_colors,
-        N=n
+        f"{cmap_name}_trunc_{min_val:.2f}_{max_val:.2f}", new_colors, N=n
     )
+
 
 # ----------------------------------------------------------------------
 #  Vector field on the screen:  V̂_ε,θ(u) = κ(ρ) u + ε (cosθ, sinθ)
@@ -111,8 +124,9 @@ def vec_field(u1: np.ndarray, u2: np.ndarray, eps: float, theta: float = 0.0):
         Second component of the vector field.
     """
     rho = np.hypot(u1, u2)
-    kappa = rho / SQRT6                     # κ(ρ) = ρ / √6
+    kappa = rho / SQRT6  # κ(ρ) = ρ / √6
     return (kappa * u1) + (eps * np.cos(theta)), (kappa * u2) + (eps * np.sin(theta))
+
 
 # ----------------------------------------------------------------------
 #  Phase-portrait plotting function
@@ -120,6 +134,13 @@ def vec_field(u1: np.ndarray, u2: np.ndarray, eps: float, theta: float = 0.0):
 def make_phase_plot(
     eps: float,
     theta: float,
+    *,
+    center_mode: str = "apex",
+    show_lambda_circle: bool = True,
+    show_null_circle: bool = True,
+    show_eps_circle: bool = True,
+    show_eig_line: bool = True,
+    show_separatrix: bool = True,
     ngrid: int = 25,
     t_max: float = 200.0,
     nt: int = 300,
@@ -162,70 +183,96 @@ def make_phase_plot(
         * ``"time"``   – by integration time λ (0 → ``t_max``),
         * ``"accel"``  – by instantaneous acceleration magnitude ‖a‖.
     """
-    if color_mode not in {"cosine", "speed", "angle", "time", "accel"}:
-        raise ValueError("color_mode must be 'cosine', 'speed', 'angle', 'time', or 'accel'")
+    if color_mode not in {"cosine", "speed", "angle", "time", "accel", "curvature"}:
+        raise ValueError(
+            "color_mode must be 'cosine', 'speed', 'angle', 'time', 'accel', or 'curvature'"
+        )
 
     # --------------------------------------------------------------
     #  Determine null point null_pt for the given ε, θ
     # --------------------------------------------------------------
     if abs(eps) < 1e-12:
-        null_pt = np.array([0.0, 0.0]) # null point at origin
+        null_pt = np.array([0.0, 0.0])  # null point at origin
     else:
-        rho_star = np.sqrt(abs(eps) * np.sqrt(6.0)) # ρ* = ε√6
-        sign     = -np.sign(eps) # sign = -1 for ε > 0, +1 for ε < 0
-        null_pt   = np.array([sign * rho_star * np.cos(theta),
-                             sign * rho_star * np.sin(theta)]) # null point
+        rho_star = np.sqrt(abs(eps) * np.sqrt(6.0))  # ρ* = ε√6
+        sign = -np.sign(eps)  # sign = -1 for ε > 0, +1 for ε < 0
+        null_pt = np.array(
+            [sign * rho_star * np.cos(theta), sign * rho_star * np.sin(theta)]
+        )  # null point
     # --------------------------------------------------------------
     #  Set up the grid for the quiver plot
     # --------------------------------------------------------------
     half = view_span / 2.0
-    # always center at null_pt (no center_mid param)
-    centre = null_pt / 2.0
+    # --------------------------------------------------------------
+    #  Choose plot centre according to user selection
+    #    "apex"      → (0,0)
+    #    "null"      → field null point
+    #    "midpoint"  → halfway between apex and null
+    # --------------------------------------------------------------
+    if center_mode == "apex":
+        centre = np.array([0.0, 0.0])
+    elif center_mode == "null":
+        centre = null_pt.copy()
+    else:  # "midpoint"
+        centre = null_pt / 2.0
     x = np.linspace(centre[0] - half, centre[0] + half, ngrid)
     y = np.linspace(centre[1] - half, centre[1] + half, ngrid)
-    X, Y = np.meshgrid(x, y) # meshgrid for quiver plot
-    U_raw, V_raw = vec_field(X, Y, eps, theta) # raw vector field
+    X, Y = np.meshgrid(x, y)  # meshgrid for quiver plot
+    U_raw, V_raw = vec_field(X, Y, eps, theta)  # raw vector field
     speed = np.hypot(U_raw, V_raw)
-    speed_max = speed.max() or 1.0 # avoid division by zero
+    speed_max = speed.max() or 1.0  # avoid division by zero
 
     # normalise quiver vectors to unit length for uniform arrow size,
     # and flip direction for inward (cosα < 0) to indicate flow direction
-    with np.errstate(invalid='ignore', divide='ignore'):
-        # Compute cosine between u and v at each grid point
+    with np.errstate(invalid="ignore", divide="ignore"):
+        # Compute cosine between u and v (still used for colour modes)
         dot = X * U_raw + Y * V_raw
         norm_u = np.hypot(X, Y)
         norm_v = np.hypot(U_raw, V_raw)
         cos_alpha = dot / (norm_u * norm_v + 1e-12)  # avoid divide by zero
 
-        # Flip direction for inward (cosα < 0)
-        sign = np.where(cos_alpha < 0, -1.0, 1.0)
-
-        # Normalise and apply directional sign
-        U = np.where(speed > 0, sign * U_raw / speed, 0.0)
-        V = np.where(speed > 0, sign * V_raw / speed, 0.0)
-        # Option to keep the original speed magnitude
-        # U = np.where(speed > 0, sign * U_raw, 0.0)
-        # V = np.where(speed > 0, sign * V_raw, 0.0)
+        # --- keep the TRUE vector directions (no flipping) ---
+        U = np.where(speed > 0, U_raw / speed, 0.0)
+        V = np.where(speed > 0, V_raw / speed, 0.0)
 
     # --------------------------------------------------------------
     #  Set up the quiver plot
     # --------------------------------------------------------------
-    fig, ax = plt.subplots(figsize=(8,8)) # create a figure and axis
-    ax.set_aspect('equal') # set aspect ratio to equal
+    fig, ax = plt.subplots(figsize=(8, 8))  # create a figure and axis
+    ax.set_aspect("equal")  # set aspect ratio to equal
 
-    # use fixed scale for uniform arrow length
-    scale_val = 10
+    # --------------------------------------------------------------
+    # Arrow length = (fraction_of_span) × view_span  (data units)
+    # For unit‑normalised (U,V) and scale_units="xy",
+    # displayed length  =  1 / scale_val  (in data units).
+    # Choose fraction = 1/20 ⇒ arrow ≈ 5 % of view width.
+    # --------------------------------------------------------------
+    arrow_frac = 1.0 / 50.0  # 5% of view span
+    arrow_len = arrow_frac * view_span
+    scale_val = 1.0 / arrow_len  # quiver scale parameter
+    # Keep shaft thickness a fixed fraction of the window width
+    width_frac = arrow_frac * 0.15  # shaft ≈ 25 % of arrow length
+    width_val = width_frac  # quiver 'width' is fraction of Axes width
 
-    # quiver coloured by original speed magnitude
-    q = ax.quiver(X, Y, U, V, speed,
-                cmap='viridis',
-                alpha=0.3,
-                norm=colors.Normalize(vmin=0.0, vmax=speed_max),
-                pivot='tail',
-                angles='xy',
-                scale_units='xy',
-                scale=scale_val
-                )
+    # quiver coloured by original speed magnitude, with fixed-size arrowheads
+    q = ax.quiver(
+        X,
+        Y,
+        U,
+        V,
+        speed,
+        cmap="viridis",
+        alpha=0.3,
+        norm=colors.Normalize(vmin=0.0, vmax=speed_max),
+        pivot="tail",
+        angles="xy",
+        scale_units="xy",
+        scale=scale_val,
+        width=width_val,  # <─ NEW: constant shaft width
+        headwidth=3.0,  # points – constant on screen
+        headlength=5.0,  # points – constant on screen
+        headaxislength=3.5,  # points – constant on screen
+    )
 
     # colour-bar to read magnitudes
     # cbar = fig.colorbar(q, ax=ax, shrink=0.8, pad=0.02, aspect=50)
@@ -236,61 +283,144 @@ def make_phase_plot(
     ax.set_ylim(centre[1] - half, centre[1] + half)
     ax.set_xlabel("v₁")
     ax.set_ylabel("v₂")
-    ax.set_title(f"ε = {eps:.3f}, θ = {theta/np.pi:.2f}π, scalar: {color_mode}")
+    ax.set_title(
+        f"ε = {eps:.3f},  θ = {theta/np.pi:.2f}π,  scalar = {color_mode}", fontsize=12
+    )
 
     # ---------------------------------------------------------------
     #  Add visual aids to the plot
     # ---------------------------------------------------------------
 
     # eigendirection (stable / neutral) visual guide
-    e_s = np.array([np.cos(theta), np.sin(theta)]) # stable eigendirection
-    # length of the line is determined by the distance to the box edge
-    if abs(e_s[0]) > 1e-12:
-        t_x = half / abs(e_s[0])
-    else:                           # direction is (0, ±1)
-        t_x = 0.0
-    if abs(e_s[1]) > 1e-12:
-        t_y = half / abs(e_s[1])
-    else:                           # direction is (±1, 0)
-        t_y = 0.0
-    # take the larger of the two distances so the line touches the box
-    L = max(t_x, t_y)
+    if show_eig_line:
+        e_s = np.array([np.cos(theta), np.sin(theta)])  # stable eigendirection
+        # length of the line is determined by the distance to the box edge
+        if abs(e_s[0]) > 1e-12:
+            t_x = half / abs(e_s[0])
+        else:
+            t_x = 0.0
+        if abs(e_s[1]) > 1e-12:
+            t_y = half / abs(e_s[1])
+        else:
+            t_y = 0.0
+        # take the larger of the two distances so the line touches the box
+        L = max(t_x, t_y)
 
-    # choose the line centre: midpoint or null point
-    line_centre = centre  # always null_pt
+        # choose the line centre: midpoint or null point
+        line_centre = centre  # always null_pt
 
-    ax.plot([line_centre[0] - L * e_s[0], line_centre[0] + L * e_s[0]],
+        ax.plot(
+            [line_centre[0] - L * e_s[0], line_centre[0] + L * e_s[0]],
             [line_centre[1] - L * e_s[1], line_centre[1] + L * e_s[1]],
-            lw=1.5, ls='-', color='black', alpha=0.8, zorder=3)
-    # annotate once per panel
-    ax.annotate(
-        "stable\neigendirection",
-        xy=(line_centre[0] - 0.54 * L * e_s[0],
-            line_centre[1] - 0.54 * L * e_s[1]),
-        xytext=(0, 0), textcoords='offset points',
-        color='black', fontsize=12, ha='center', va='center',
-        bbox=dict(facecolor='white', edgecolor='none', alpha=0.6, pad=1)
-    )
+            lw=1.0,
+            ls="-",
+            color="black",
+            alpha=0.8,
+            zorder=3,
+        )
+
+        # --- improved label position for stable eigendirection annotation ---
+        # Place label a fixed distance inside the plot boundary along the eigendirection
+        margin_frac = 0.35  # place label just inside the view edge
+        bound_x = centre[0] + half
+        bound_y = centre[1] + half
+        if abs(e_s[0]) > abs(e_s[1]):
+            label_pos_x = bound_x - margin_frac
+            label_pos_y = line_centre[1] + (label_pos_x - line_centre[0]) * e_s[1] / e_s[0]
+        else:
+            label_pos_y = bound_y - margin_frac
+            label_pos_x = line_centre[0] + (label_pos_y - line_centre[1]) * e_s[0] / e_s[1]
+        label_pos = np.array([label_pos_x, label_pos_y])
+        ax.annotate(
+            "stable\neigendirection",
+            xy=(label_pos[0], label_pos[1]),
+            xytext=(0, 0),
+            textcoords="offset points",
+            color="black",
+            fontsize=8,
+            ha="center",
+            va="center",
+            bbox=dict(facecolor="white", edgecolor="none", alpha=0.6, pad=1),
+        )
     # ------------------------------------------------------
-    # visual λ-circle (ρ = 1)
-    ax.add_patch(plt.Circle((0.0, 0.0), 1.0,
-                            ec='darkred', lw=1, ls=':', alpha=0.6,
-                            fill=False, zorder=2))
-    ax.annotate(
-        "λ-circle  (ρ = 1)",
-        xy=(0, 1),
-        xytext=(0, 14),
-        textcoords="offset points",
-        ha="center", va="center", fontsize=12,
-        color="darkred", weight="normal",
-        bbox=dict(facecolor='white', edgecolor='none', alpha=0.6, pad=1)
-    )
+    # visual λ-circle (ρ = 1.5)
+    # if show_lambda_circle:
+    #     ax.add_patch(
+    #         plt.Circle(
+    #             (0.0, 0.0), 1.5, ec="darkred", lw=1, ls=":", alpha=0.6, fill=False, zorder=2
+    #         )
+    #     )
+    #     ax.annotate(
+    #         "λ-circle  ρ = 3/2",
+    #         xy=(0, 1),
+    #         xytext=(0, 70),
+    #         textcoords="offset points",
+    #         ha="center",
+    #         va="center",
+    #         fontsize=12,
+    #         color="darkred",
+    #         weight="normal",
+    #         bbox=dict(facecolor="white", edgecolor="none", alpha=0.6, pad=1),
+    #     )
+    # dashed circle at the null radius ρ_null = sqrt(ε√6)
+    rho_null = np.sqrt(abs(eps) * np.sqrt(6.0))
+    if show_null_circle:
+        ax.add_patch(
+            plt.Circle(
+                (0.0, 0.0),
+                rho_null,
+                ec="grey",
+                lw=1,
+                ls="--",
+                alpha=0.6,
+                fill=False,
+                zorder=2,
+            )
+        )
+        ax.annotate(
+            "null circle",
+            xy=(0, rho_null),
+            xytext=(0, 14),
+            textcoords="offset points",
+            ha="center",
+            va="center",
+            fontsize=10,
+            color="grey",
+            bbox=dict(facecolor="white", edgecolor="none", alpha=0.6, pad=1),
+        )
+    # ------------------------------------------------------
+    # visual circle ρ(null) = √6 ε
+    # if show_eps_circle:
+    #     ax.add_patch(
+    #         plt.Circle(
+    #             (0, 0),
+    #             np.sqrt(6.0) * abs(eps),
+    #             ec="purple",
+    #             lw=1,
+    #             ls=":",
+    #             alpha=0.6,
+    #             fill=False,
+    #             zorder=2,
+    #         )
+    #     )
+    #     ax.annotate(
+    #         "balance circle",
+    #         xy=(0, 0 + np.sqrt(6.0) * abs(eps)),
+    #         xytext=(0, 14),
+    #         textcoords="offset points",
+    #         ha="center",
+    #         va="center",
+    #         fontsize=12,
+    #         color="purple",
+    #         weight="normal",
+    #         bbox=dict(facecolor="white", edgecolor="none", alpha=0.6, pad=1),
+    #     )
     # ------------------------------------------------------
     # mark the origin and the field-null point
-    ax.scatter(null_pt[0], null_pt[1], s=8, marker='o',
-               c='white', edgecolors='k', zorder=4)
-    ax.scatter(0.0, 0.0, s=8, marker='o',
-               c='black', edgecolors='w', zorder=5)
+    ax.scatter(
+        null_pt[0], null_pt[1], s=8, marker="o", c="white", edgecolors="k", zorder=4
+    )
+    ax.scatter(0.0, 0.0, s=8, marker="o", c="black", edgecolors="w", zorder=5)
 
     # ----------------------------------------------------------------
     #  Add phase trajectories
@@ -302,10 +432,12 @@ def make_phase_plot(
     n_seeds = int(seed_base)
     angles = np.linspace(0.0, 2 * np.pi, n_seeds, endpoint=False)
     # Seed points placed at uniform angles around the null point
-    starts.extend([
-        (null_pt[0] + seed_radius * np.cos(a),
-        null_pt[1] + seed_radius * np.sin(a)) for a in angles
-    ])
+    starts.extend(
+        [
+            (null_pt[0] + seed_radius * np.cos(a), null_pt[1] + seed_radius * np.sin(a))
+            for a in angles
+        ]
+    )
     # -----------------------------------------------------------------------
     # (c) randomise the initial conditions
     if jitter > 0.0:
@@ -314,132 +446,181 @@ def make_phase_plot(
         new_starts = []
         for (p_x, p_y), (n_x, n_y) in zip(starts, noise):
             rho_p = np.hypot(p_x, p_y)
-            if abs(rho_p - 1.0) < 1e-6:            # λ-circle → no jitter
+            if abs(rho_p - 1.0) < 1e-6:  # λ-circle → no jitter
                 new_starts.append((p_x, p_y))
-            else:                                  # apply jitter
-                new_starts.append((
-                    np.clip(p_x + n_x, null_pt[0] - half, null_pt[0] + half),
-                    np.clip(p_y + n_y, null_pt[1] - half, null_pt[1] + half)
-                ))
+            else:  # apply jitter
+                new_starts.append(
+                    (
+                        np.clip(p_x + n_x, null_pt[0] - half, null_pt[0] + half),
+                        np.clip(p_y + n_y, null_pt[1] - half, null_pt[1] + half),
+                    )
+                )
         starts = new_starts
     # -----------------------------------------------------------------------
     # --- the phase trajectories -----------------------------
-    line_width = 0.5 # line width for the segments
-    alpha_seg = 1 # alpha for the segments
-    traj_store = [] # store the trajectories
+    line_width = 0.5  # line width for the segments
+    alpha_seg = 1  # alpha for the segments
+    traj_store = []  # store the trajectories
     accel_max_traj = 0.0
+    global_curv_values = []  # gather for global colour scale
     for u1_0, u2_0 in starts:
-        traj = np.empty((nt, 2)) # store the trajectory points
-        scal = np.empty(nt-1)         # directional cosine (cosine mode)
-        scal_speed = np.empty(nt-1)   # instantaneous speed   (speed mode)
-        scal_angle = np.empty(nt-1)   # polar angle  (angle mode)
-        scal_time  = np.empty(nt-1)   # λ‑time         (time mode)
-        scal_acc   = np.empty(nt-1)   # acceleration   (accel mode)
-        sep_pts = []                # store positions where ⟨u,ẋ⟩≈0
+        traj = np.empty((nt, 2))  # store the trajectory points
+        scal = np.empty(nt - 1)  # directional cosine (cosine mode)
+        scal_speed = np.empty(nt - 1)  # instantaneous speed   (speed mode)
+        scal_angle = np.empty(nt - 1)  # polar angle  (angle mode)
+        scal_time = np.empty(nt - 1)  # λ‑time         (time mode)
+        scal_acc = np.empty(nt - 1)  # acceleration   (accel mode)
+        scal_curv = np.empty(nt - 1)  # curvature scalar
+        sep_pts = []  # store positions where ⟨u,ẋ⟩≈0
         u1, u2 = u1_0, u2_0
         traj[0] = (u1, u2)
         t = 0.0
         # ----- initial velocity for accel mode -----
         v1_prev, v2_prev = vec_field(u1, u2, eps, theta)
-        for k in range(1, nt): # time-stepping loop
-            v1, v2 = vec_field(u1, u2, eps, theta) # vector field
+        for k in range(1, nt):  # time-stepping loop
+            v1, v2 = vec_field(u1, u2, eps, theta)  # vector field
             u1 += h * v1
             u2 += h * v2
             t += h
             traj[k] = (u1, u2)
             # ----- directional cosine for colour -----
-            speed_seg = np.hypot(v1, v2) + 1e-12 # avoid division by zero
+            speed_seg = np.hypot(v1, v2) + 1e-12  # avoid division by zero
             cos_alpha = (u1 * v1 + u2 * v2) / (np.hypot(u1, u2) * speed_seg)
-            scal_speed[k-1] = speed_seg                 # store for "speed" mode
-            scal[k-1] = cos_alpha                  # default cosine scalar
+            scal_speed[k - 1] = speed_seg  # store for "speed" mode
+            scal[k - 1] = cos_alpha  # default cosine scalar
             # ---- detect separatrix crossing (cosα = 0) ----
             if k > 1:
-                if scal[k-2] * cos_alpha < 0:        # sign change ⇒ crossed
+                if scal[k - 2] * cos_alpha < 0:  # sign change ⇒ crossed
                     # linear interpolation for better estimate
-                    w = abs(scal[k-2]) / (abs(scal[k-2]) + abs(cos_alpha))
-                    x_sep = (1 - w) * traj[k-1, 0] + w * u1
-                    y_sep = (1 - w) * traj[k-1, 1] + w * u2
+                    w = abs(scal[k - 2]) / (abs(scal[k - 2]) + abs(cos_alpha))
+                    x_sep = (1 - w) * traj[k - 1, 0] + w * u1
+                    y_sep = (1 - w) * traj[k - 1, 1] + w * u2
                     sep_pts.append((x_sep, y_sep))
             # ----- polar angle for "angle" mode -----
-            phi_seg = np.arctan2(u2, u1)           # range (-π, π]
-            scal_angle[k-1] = phi_seg
+            phi_seg = np.arctan2(u2, u1)  # range (-π, π]
+            scal_angle[k - 1] = phi_seg
             # ----- λ-time for "time" mode -----
-            scal_time[k-1] = t        # store current λ for "time" mode
+            scal_time[k - 1] = t  # store current λ for "time" mode
             # ----- acceleration magnitude for "accel" mode -----
             acc_seg = np.hypot(v1 - v1_prev, v2 - v2_prev) / h
-            scal_acc[k-1] = acc_seg
+            scal_acc[k - 1] = acc_seg
             accel_max_traj = max(accel_max_traj, acc_seg)
-            v1_prev, v2_prev = v1, v2              # update for next step
+            # ----- affine‑shifted curvature κ(u) = uᵀ S u / |u|² -----
+            cos_t, sin_t = np.cos(theta), np.sin(theta)
+            # Raw R-matrix components
+            R11 = eps / np.sqrt(6.0) * (4 * cos_t**2 + sin_t**2)
+            R22 = eps / np.sqrt(6.0) * (4 * sin_t**2 + cos_t**2)
+            R12 = eps / np.sqrt(6.0) * 3 * cos_t * sin_t
+            # Trace term and affine shift
+            trace_R = 5 * eps / np.sqrt(6.0)
+            shift = (1.0 / 6.0) - trace_R / 3.0
+            # Components of S = R - Tr/3 I + 1/6 I
+            S11 = R11 + shift
+            S22 = R22 + shift
+            S12 = R12
+            # Quadratic form
+            num = S11 * u1 * u1 + 2 * S12 * u1 * u2 + S22 * u2 * u2
+            den = (u1 * u1 + u2 * u2) + 1e-12
+            scal_curv[k - 1] = num / den
+            v1_prev, v2_prev = v1, v2  # update for next step
+        global_curv_values.extend(scal_curv.tolist())
         segs = np.column_stack([traj[:-1], traj[1:]]).reshape(-1, 2, 2)
-        traj_store.append((segs,
-                           scal.copy(),        # cosine
-                           scal_speed.copy(),  # speed
-                           scal_angle.copy(),  # angle
-                           scal_time.copy(),   # time
-                           scal_acc.copy(),    # accel
-                           sep_pts,            # separatrix points
-                           alpha_seg))
+        traj_store.append(
+            (
+                segs,
+                scal.copy(),  # cosine
+                scal_speed.copy(),  # speed
+                scal_angle.copy(),  # angle
+                scal_time.copy(),  # time
+                scal_acc.copy(),  # accel
+                scal_curv.copy(),  # curvature
+                sep_pts,  # separatrix points
+                alpha_seg,
+            )
+        )
     # --- color the segments by the directional cosines, speed, or angle
-    norm_panel = colors.Normalize(vmin=-1.0, vmax=1.0) # directional cosine ∈ [−1,1]
+    norm_panel = colors.Normalize(vmin=-1.0, vmax=1.0)  # directional cosine ∈ [−1,1]
     accel_max = accel_max_traj or 1.0
     # scale factor so that acceleration colours span [0,1]
     accel_scale = 1
-    for segs, scal_cos, scal_spd, scal_ang, scal_tim, scal_acc, sep_pts, alpha_seg in traj_store:
+    if color_mode == "curvature":
+        curv_arr = np.array(global_curv_values)
+        if (curv_arr < 0).any():
+            min_neg = np.percentile(curv_arr[curv_arr < 0], 5)
+        else:
+            min_neg = -1e-6
+        if (curv_arr > 0).any():
+            max_pos = np.percentile(curv_arr[curv_arr > 0], 95)
+        else:
+            max_pos = 1e-6
+    for (
+        segs,
+        scal_cos,
+        scal_spd,
+        scal_ang,
+        scal_tim,
+        scal_acc,
+        scal_curv,
+        sep_pts,
+        alpha_seg,
+    ) in traj_store:
         if color_mode == "speed":
             scal_arr = scal_spd
             norm_seg = colors.Normalize(vmin=0.0, vmax=speed_max)
-            cmap_this = 'plasma'
+            cmap_this = "plasma"
         elif color_mode == "angle":
             scal_arr = scal_ang
             norm_seg = colors.Normalize(vmin=-np.pi, vmax=np.pi)
-            cmap_this = 'hsv'
+            cmap_this = "hsv"
         elif color_mode == "time":
             scal_arr = scal_tim
-            norm_seg = colors.Normalize(vmin=0.0, vmax=t_max/2)
-            cmap_this = 'inferno'
+            norm_seg = colors.Normalize(vmin=0.0, vmax=t_max / 2)
+            cmap_this = "inferno"
         elif color_mode == "accel":
-            scal_arr = scal_acc * accel_scale     # map to [0,1]
+            scal_arr = scal_acc * accel_scale  # map to [0,1]
             norm_seg = colors.NoNorm(vmin=0.0, vmax=1.0)
-            cmap_this = 'flag'
-        else:                         # "cosine" (default)
+            cmap_this = "flag"
+        elif color_mode == "curvature":
+            scal_arr = scal_curv
+            norm_seg = colors.TwoSlopeNorm(vmin=min_neg, vcenter=0.0, vmax=max_pos)
+            cmap_this = "seismic"
+        else:  # "cosine" (default)
             scal_arr = scal_cos
             norm_seg = norm_panel
-            cmap_this = 'jet'
-        trunc_map = truncate_cmap(cmap_this, 0.02, 0.98)
-        lc = LineCollection(segs,
-                            cmap=trunc_map,
-                            norm=norm_seg)
+            cmap_this = "jet"
+        trunc_map = truncate_cmap(cmap_this, 0.0, 1.0)
+        lc = LineCollection(segs, cmap=trunc_map, norm=norm_seg)
         lc.set_array(scal_arr)
         lc.set_linewidth(line_width)
         lc.set_alpha(alpha_seg)
         ax.add_collection(lc)
 
-
         # --- add the separatrix limaçon ---------------------------------
         # The separatrix (〈u,v〉 = 0) satisfies
         #       ρ^2 = -√6 ε cos(φ − θ)   with φ = arctan2(u₂,u₁)
         # This is real only when cos(φ−θ) ≤ 0, i.e. φ ∈ [θ+π/2, θ+3π/2].
-        if abs(eps) > 1e-12:
-            phi_lim = np.linspace(theta + 0.5*np.pi,
-                                  theta + 1.5*np.pi,
-                                  100, endpoint=True)
-            rho_lim = np.sqrt(np.maximum(0.0,
-                               -np.sqrt(6.0)*eps*np.cos(phi_lim - theta)))
+        if show_separatrix and abs(eps) > 1e-12:
+            phi_lim = np.linspace(
+                theta + 0.5 * np.pi, theta + 1.5 * np.pi, 100, endpoint=True
+            )
+            rho_lim = np.sqrt(
+                np.maximum(0.0, -np.sqrt(6.0) * eps * np.cos(phi_lim - theta))
+            )
             x_lim = rho_lim * np.cos(phi_lim)
             y_lim = rho_lim * np.sin(phi_lim)
-            ax.plot(x_lim, y_lim,
-                    lw=0.5, ls=':', color='darkgreen', alpha=0.6)
+            ax.plot(x_lim, y_lim, lw=0.5, ls=":", color="darkgreen", alpha=0.6)
             ax.annotate(
-                "separatrix",
+                r"separatrix",
                 xy=(x_lim[9], y_lim[9]),
-                xytext=(x_lim[9], y_lim[9]+0.2),
+                xytext=(x_lim[9], y_lim[9] + 0.2),
                 textcoords="data",
-                ha="center", va="center", fontsize=12,
-                color="darkgreen", weight="normal",
-                bbox=dict(facecolor='white', edgecolor='none', alpha=0.6, pad=1)
+                ha="center",
+                va="center",
+                fontsize=12,
+                color="darkgreen",
+                weight="normal",
+                bbox=dict(facecolor="white", edgecolor="none", alpha=0.6, pad=1),
             )
-
-
 
     # --------------------------------------------------------------
     #  Add legend (optional: for separatrix curve)
@@ -447,34 +628,91 @@ def make_phase_plot(
     # ax.legend(loc='upper right', fontsize=12)
 
     # --------------------------------------------------------------
-    #  Save the figure
+    #  Plot the figure
     # --------------------------------------------------------------
-    fig.tight_layout() # adjust layout to fit
+    fig.tight_layout()  # adjust layout to fit
     st.pyplot(fig)
-
 
 
 # --- Streamlit UI in main() ---
 def main():
     st.title("Screen Phase Portrait Explorer")
-    st.sidebar.header("Diagnostic Scalar")
-    color_mode = st.sidebar.selectbox("Colour mode", ["cosine", "speed", "angle", "time", "accel"])
-    st.sidebar.header("Parameters")
-    eps = st.sidebar.slider("shear strength ε", 0.0, 4.0, value=0.4082, step=0.001)
-    theta = st.sidebar.slider("shear direction θ (rad)", 0.0, float(2*np.pi), value=0.0, step=0.01)
-    st.sidebar.markdown("### Settings")
-    ngrid = st.sidebar.slider("vector field density", 1, 50, value=24, step=1)
-    t_max = st.sidebar.slider("maximum time (trajectory length)", 1.0, 100.0, value=20.0, step=1.0)
-    nt = st.sidebar.slider("time steps (trajectory resolution)", 50, 2000, value=300, step=50)
-    seed_base = st.sidebar.slider("trajectory seeds", 1, 720, value=100, step=1)
-    seed_radius = st.sidebar.slider("seed distance from null point", 0.01, 0.25, value=0.05, step=0.005)
-    jitter = st.sidebar.slider("jitter (seeding noise)", 0.0, 0.3, value=0.0, step=0.01)
-    view_span = st.sidebar.slider("View span (zoom)", 1.0, 10.0, value=5.0, step=0.1)
+    st.sidebar.header("Phase Portrait Settings")
+    color_mode = st.sidebar.selectbox(
+        "**Diagnostic scalar**", ["cosine", "speed", "angle", "time", "accel", "curvature"]
+    )
+    with st.sidebar.expander("**Parameters**", expanded=True):
+        # --- ε input: slider + precise box ---------------------------------
+        eps_min, eps_max = 0.0, 4.0
+        eps_box = st.number_input(
+            "Exact ε value",
+            min_value=eps_min,
+            max_value=eps_max,
+            value=3 / (2 * np.sqrt(6)),
+            step=0.001,
+            format="%.6f",
+        )
+        eps_slider = st.slider(
+            "ε (shear strength)",
+            eps_min,
+            eps_max,
+            value=float(eps_box),
+            step=0.01,
+            format="%.2f",
+        )
+        # keep the two widgets in sync:
+        eps = eps_slider if abs(eps_slider - eps_box) > 1e-9 else eps_box
+        theta = st.slider(
+            "shear direction θ (rad)", 0.0, float(2 * np.pi), value=0.0, step=0.01
+        )
+
+    with st.sidebar.expander("**Visual aids**", expanded=False):
+        show_separatrix    = st.checkbox("Separatrix", value=True)
+        show_eig_line      = st.checkbox("Stable eigendirection line", value=False)
+        show_null_circle   = st.checkbox("null circle (ρ = √(√6 ε)", value=False)
+        # show_eps_circle    = st.checkbox("balance circle (ρ = √6 ε)", value=False)
+        # show_lambda_circle = st.checkbox("λ‑circle (ρ = 3/2)", value=False)
+
+    with st.sidebar.expander("**View Options**", expanded=True):
+        ngrid = st.slider("vector field density", 10, 50, value=24, step=1)
+        view_span = st.slider("View span (zoom)", 1.0, 10.0, value=6.0, step=0.1)
+        center_mode = st.radio(
+            "View centre",
+            options=["apex", "null", "midpoint"],
+            index=0,
+            help="Choose which point the plot is centred on.",
+        )
+
+    with st.sidebar.expander("**Trajectory settings**", expanded=False):
+        t_max = st.slider(
+            "maximum time (trajectory length)", 1.0, 100.0, value=20.0, step=1.0
+        )
+        nt = st.slider(
+            "time steps (trajectory resolution)", 50, 2000, value=300, step=50
+        )
+        seed_base = st.slider("trajectory seeds", 1, 720, value=180, step=1)
+        seed_radius = st.slider(
+            "seed distance from null point", 0.01, 0.4, value=0.05, step=0.005
+        )
+        jitter = st.slider("jitter (seeding noise)", 0.0, 0.3, value=0.0, step=0.01)
+
     make_phase_plot(
-        eps, theta,
-        ngrid=ngrid, t_max=t_max, nt=nt,
-        seed_base=seed_base, seed_radius=seed_radius, jitter=jitter,
-        view_span=view_span, color_mode=color_mode,
+        eps,
+        theta,
+        ngrid=ngrid,
+        t_max=t_max,
+        nt=nt,
+        seed_base=seed_base,
+        seed_radius=seed_radius,
+        jitter=jitter,
+        view_span=view_span,
+        color_mode=color_mode,
+        center_mode=center_mode,
+        # show_lambda_circle=show_lambda_circle,
+        show_null_circle=show_null_circle,
+        # show_eps_circle=show_eps_circle,
+        show_eig_line=show_eig_line,
+        show_separatrix=show_separatrix,
     )
 
 
