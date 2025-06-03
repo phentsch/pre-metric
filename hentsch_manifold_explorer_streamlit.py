@@ -627,7 +627,7 @@ def make_plot(
 # Streamlit sidebar UI
 # ==============================================================================
 st.title("Hentsch Manifold Visualization")
-
+st.sidebar.header("Plot Controls")
 with st.sidebar.expander("View Controls", expanded=True):
     projection_type = st.selectbox("Projection", options=['persp', 'ortho'], index=0)
     elevation = st.slider("Elevation°", -90, 90, value=20, step=1)
