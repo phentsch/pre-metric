@@ -645,26 +645,44 @@ with st.sidebar.expander("Framework", expanded=False):
 with st.sidebar.expander("Quadratic Cone", expanded=True):
     show_cone = st.checkbox("Show Cone Surface", value=True)
     show_wireframe = st.checkbox("Show Cone Wireframe", value=True)
-    # quadratic_value = st.slider("Q = n Foliation Level", -0.99, 0.99, value=0.0, step=0.001)
-    quadratic_value_min, quadratic_value_max = -0.99, 0.99
-    quadratic_value_box = st.number_input(
+    # ----- initialise state once -----
+    if "quadratic_value" not in st.session_state:
+        st.session_state.quadratic_value = 0.0
+    if "q_box" not in st.session_state:
+        st.session_state.q_box = st.session_state.quadratic_value
+    if "q_slider" not in st.session_state:
+        st.session_state.q_slider = st.session_state.quadratic_value
+
+    def box_changed():
+        val = st.session_state.q_box
+        st.session_state.quadratic_value = val
+        st.session_state.q_slider = val      # keep slider in sync
+
+    def slider_changed():
+        val = st.session_state.q_slider
+        st.session_state.quadratic_value = val
+        st.session_state.q_box = val         # keep number box in sync
+
+    # ----- widgets -----
+    q_box = st.number_input(
         "Exact n value",
-        min_value=quadratic_value_min,
-        max_value=quadratic_value_max,
-        value=0.1,
+        -0.99, 0.99,
+        key="q_box",
         step=0.001,
         format="%.3f",
+        on_change=box_changed,
     )
-    quadratic_value_slider = st.slider(
+
+    q_slider = st.slider(
         "Q = n Foliation Level",
-        quadratic_value_min,
-        quadratic_value_max,
-        value=float(quadratic_value_box),
-        step=0.01,
-        format="%.2f",
+        -0.99, 0.99,
+        key="q_slider",
+        step=0.001,          # same resolution
+        format="%.3f",
+        on_change=slider_changed,
     )
-    # keep the two widgets in sync:
-    quadratic_value = quadratic_value_slider if abs(quadratic_value_slider - quadratic_value_box) > 1e-9 else quadratic_value_box
+
+    quadratic_value = st.session_state.quadratic_value
     scale_factor = st.slider("Scale Factor", 1.0, 100.0, value=1.0, step=0.01)
     show_screen_planes = st.checkbox("Show Screen Plane", value=False)
     s_value = st.slider("Screen Plane s-value", -1.0, 1.0, value=0.0, step=0.01)
