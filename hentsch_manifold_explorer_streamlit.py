@@ -627,33 +627,41 @@ def make_plot(
 # Streamlit sidebar UI
 # ==============================================================================
 st.title("Hentsch Manifold Visualization")
-st.sidebar.title("Controls")
-projection_type = st.sidebar.selectbox("Projection", options=['persp', 'ortho'], index=0)
-elevation = st.sidebar.slider("Elev°", -90, 90, value=20, step=1)
-azimuth = st.sidebar.slider("Azim°", -180, 180, value=-45, step=1)
-epsilon = st.sidebar.slider("ε", -4.0, 4.0, value=1/np.sqrt(6), step=0.01)
-theta_deg = st.sidebar.slider("θ°", 0, 360, value=60, step=1)
-quadratic_value = st.sidebar.slider("Q level", -0.99, 0.99, value=0.0, step=0.001)
-scale_factor = st.sidebar.slider("scale", 1.0, 100.0, value=1.0, step=0.01)
-s_value = st.sidebar.slider("s value", -1.0, 1.0, value=0.0, step=0.01)
-quiver_num = st.sidebar.slider("quivers", 10, 1000, value=500, step=5)
 
-st.sidebar.markdown("### Feature Toggles")
-reorient_vertical = st.sidebar.checkbox("reorient_vertical", value=False)
-show_cone = st.sidebar.checkbox("show_cone", value=True)
-show_wireframe = st.sidebar.checkbox("show_wireframe", value=True)
-show_basis = st.sidebar.checkbox("show_basis", value=False)
-show_vectors3d = st.sidebar.checkbox("show_vectors3d", value=True)
-show_canonical_vector_field = st.sidebar.checkbox("show_canonical_vector_field", value=False)
-show_shear_vector_field = st.sidebar.checkbox("show_shear_vector_field", value=False)
-show_combined_vector_field = st.sidebar.checkbox("show_combined_vector_field", value=False)
-show_planes = st.sidebar.checkbox("show_planes", value=False)
-show_screen_planes = st.sidebar.checkbox("show_screen_planes", value=False)
+with st.sidebar.expander("View Controls", expanded=True):
+    projection_type = st.selectbox("Projection", options=['persp', 'ortho'], index=0)
+    elevation = st.slider("Elevation°", -90, 90, value=20, step=1)
+    azimuth = st.slider("Azimuth°", -180, 180, value=-45, step=1)
+    reorient_vertical = st.checkbox("𝓵-axis Vertical", value=False)
 
-st.sidebar.markdown("### Axes")
-show_axes_dict = {}
-for k in "abcdef":
-    show_axes_dict[k] = st.sidebar.checkbox(f"axis {k}", value=True)
+with st.sidebar.expander("Framework", expanded=False):
+    st.markdown("### Axes")
+    show_axes_dict = {}
+    for k in "abcdef":
+        show_axes_dict[k] = st.checkbox(f"axis {k}", value=True)
+    st.markdown("### Complex Planes")
+    show_planes = st.checkbox("Show Complex Planes", value=False)
+
+with st.sidebar.expander("Quadratic Cone", expanded=True):
+    show_cone = st.checkbox("Show Cone Surface", value=True)
+    show_wireframe = st.checkbox("Show Cone Wireframe", value=True)
+    quadratic_value = st.slider("Q = n Foliation Level", -0.99, 0.99, value=0.0, step=0.001)
+    scale_factor = st.slider("Scale Factor", 1.0, 100.0, value=1.0, step=0.01)
+    show_screen_planes = st.checkbox("Show Screen Plane", value=False)
+    s_value = st.slider("Screen Plane s-value", -1.0, 1.0, value=0.0, step=0.01)
+
+with st.sidebar.expander("Vector Fields", expanded=True):
+    st.markdown("### Parameters")
+    theta_deg = st.slider("Expansion θ°", 0, 360, value=60, step=1)
+    epsilon = st.slider("Shear ε", -4.0, 4.0, value=3/(2*np.sqrt(6)), step=0.01)
+    st.markdown("### Options")
+    quiver_num = st.slider("Quiver Density", 10, 1000, value=500, step=5)
+    show_basis = st.checkbox("Show Linear Basis Vectors", value=False)
+    show_vectors3d = st.checkbox("Show Field Vectors", value=True)
+    show_canonical_vector_field = st.checkbox("Canonical Field Vectors", value=False)
+    show_shear_vector_field = st.checkbox("Shear Field Vectors", value=False)
+    show_combined_vector_field = st.checkbox("Combined Deformation Vectors", value=False)
+
 
 # ==============================================================================
 # Plot and display
