@@ -645,7 +645,26 @@ with st.sidebar.expander("Framework", expanded=False):
 with st.sidebar.expander("Quadratic Cone", expanded=True):
     show_cone = st.checkbox("Show Cone Surface", value=True)
     show_wireframe = st.checkbox("Show Cone Wireframe", value=True)
-    quadratic_value = st.slider("Q = n Foliation Level", -0.99, 0.99, value=0.0, step=0.001)
+    # quadratic_value = st.slider("Q = n Foliation Level", -0.99, 0.99, value=0.0, step=0.001)
+    quadratic_value_min, quadratic_value_max = -0.99, 0.99
+    quadratic_value_box = st.number_input(
+        "Exact n value",
+        min_value=quadratic_value_min,
+        max_value=quadratic_value_max,
+        value=0.0,
+        step=0.001,
+        format="%.6f",
+    )
+    quadratic_value_slider = st.slider(
+        "Q = n Foliation Level",
+        quadratic_value_min,
+        quadratic_value_max,
+        value=float(quadratic_value_box),
+        step=0.01,
+        format="%.2f",
+    )
+    # keep the two widgets in sync:
+    eps = quadratic_value_slider if abs(quadratic_value_slider - quadratic_value_box) > 1e-9 else quadratic_value_box
     scale_factor = st.slider("Scale Factor", 1.0, 100.0, value=1.0, step=0.01)
     show_screen_planes = st.checkbox("Show Screen Plane", value=False)
     s_value = st.slider("Screen Plane s-value", -1.0, 1.0, value=0.0, step=0.01)
