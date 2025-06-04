@@ -658,26 +658,39 @@ def main():
         "**Diagnostic scalar**", ["cosine", "speed", "angle", "time", "accel", "curvature"]
     )
     with st.sidebar.expander("**Parameters**", expanded=True):
-        # --- ε input: slider + precise box ---------------------------------
-        eps_min, eps_max = 0.0, 4.0
+            # -------- Define the interaction handlers for the number box and slider
+        def box_changed():
+            # fetch whichever key is present; default to 0.0
+            val = st.session_state.get("eps_box", st.session_state.get("eps", 3/ (2 * np.sqrt(6))))
+            st.session_state["eps"] = val
+            st.session_state["eps_slider"] = val      # keep slider in sync
+        def slider_changed():
+            val = st.session_state.get("eps_slider", st.session_state.get("eps", 3/ (2 * np.sqrt(6))))
+            st.session_state["eps"] = val
+            st.session_state["eps_box"] = val         # keep number box in sync
+        # ----- widgets -----
+        val = st.session_state.get("eps", 3/ (2 * np.sqrt(6)))
+        eps_min, eps_max = 0.0, 5.0
         eps_box = st.number_input(
             "Exact ε value",
-            min_value=eps_min,
-            max_value=eps_max,
-            value=3 / (2 * np.sqrt(6)),
-            step=0.001,
-            format="%.6f",
+            eps_min, eps_max,
+            value=val,
+            key="eps_box",
+            step=0.005,
+            format="%.3f",
+            on_change=box_changed,
         )
         eps_slider = st.slider(
-            "ε (shear strength)",
-            eps_min,
-            eps_max,
-            value=float(eps_box),
-            step=0.01,
-            format="%.2f",
+            "Shear Strength ε",
+            eps_min, eps_max,
+            value=val,
+            key="eps_slider",
+            step=0.005,
+            format="%.3f",
+            on_change=slider_changed,
         )
-        # keep the two widgets in sync:
-        eps = eps_slider if abs(eps_slider - eps_box) > 1e-9 else eps_box
+        eps = val
+
         theta = st.slider(
             "shear direction θ (rad)", 0.0, float(2 * np.pi), value=0.0, step=0.01
         )

@@ -653,21 +653,18 @@ with st.sidebar.expander("Framework", expanded=False):
 with st.sidebar.expander("Quadratic Cone", expanded=True):
     show_cone = st.checkbox("Show Cone Surface", value=True)
     show_wireframe = st.checkbox("Show Cone Wireframe", value=True)
-
+    # -------- Define the interaction handlers for the number box and slider
     def box_changed():
         # fetch whichever key is present; default to 0.0
         val = st.session_state.get("q_box", st.session_state.get("quadratic_value", 0.0))
         st.session_state["quadratic_value"] = val
         st.session_state["q_slider"] = val      # keep slider in sync
-
     def slider_changed():
         val = st.session_state.get("q_slider", st.session_state.get("quadratic_value", 0.0))
         st.session_state["quadratic_value"] = val
         st.session_state["q_box"] = val         # keep number box in sync
-
     # ----- widgets -----
     val = st.session_state.get("quadratic_value", 0.0)
-
     q_box = st.number_input(
         "Exact n value",
         -0.99, 0.99,
@@ -677,7 +674,6 @@ with st.sidebar.expander("Quadratic Cone", expanded=True):
         format="%.3f",
         on_change=box_changed,
     )
-
     q_slider = st.slider(
         "Q = n Foliation Level",
         -0.99, 0.99,
@@ -687,8 +683,8 @@ with st.sidebar.expander("Quadratic Cone", expanded=True):
         format="%.3f",
         on_change=slider_changed,
     )
-
     quadratic_value = val
+
     scale_factor = st.slider("Scale Factor", 1.0, 100.0, value=1.0, step=0.01)
     show_screen_planes = st.checkbox("Show Screen Plane", value=False)
     s_value = st.slider("Screen Plane s-value", -1.0, 1.0, value=0.0, step=0.01)
