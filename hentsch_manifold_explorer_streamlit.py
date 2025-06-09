@@ -140,9 +140,13 @@ d_label = 'd'
 e_label = 'e'
 f_label = 'f'
 basis_vecs = [
-    np.array([ 1, -1,  0], dtype=float),
-    np.array([ 0,  1, -1], dtype=float),
-    np.array([-1,  0,  1], dtype=float),   # = –(v1+v2)
+    # Oriented to match the linear shear fields
+    #   W₁ ≈ ( 0, -1,  1)
+    #   W₂ ≈ (-1,  0,  1)
+    #   W₃ ≈ ( 1, -1,  0)
+    np.array([ 0, -1,  1], dtype=float),   # W₁ direction
+    np.array([-1,  0,  1], dtype=float),   # W₂ direction
+    np.array([ 1, -1,  0], dtype=float),   # W₃ direction
 ]
 basis_vecs = [v / np.linalg.norm(v) for v in basis_vecs]   # normalise
 
@@ -180,6 +184,7 @@ def make_plot(
     elevation,
     azimuth,
     theta_deg,
+    phi_deg,
     epsilon,
     quadratic_value,
     scale_factor,
@@ -204,6 +209,7 @@ def make_plot(
     # Clamp epsilon to prevent extreme values
     epsilon = np.clip(epsilon, -1e3, 1e3)  # prevent extreme values
     theta_rad = np.deg2rad(theta_deg)
+    phi_rad   = np.deg2rad(phi_deg)
 
     # Recompute geometry-related bounds and ticks using scale_factor
     plot_bounds = scale_factor * CFG["zoom"]
@@ -595,26 +601,38 @@ def make_plot(
                 return np.array([a * a - c * e, c * c - a * e, e * e - a * c])
             vecs_list.append(np.array([V_can(*p) for p in pts]))
         if show_shear_vector_field:
+            def W1(a, c, e):
+                # Linear field orthogonal to the W2–W3 shear plane
+                return np.array([0, -a - c, a + e])
             def W3(a, c, e):
                 return np.array([c - e, e - a, a - c])
             def W2(a, c, e):
-                return np.array([- a - a, 0, c + e])
+                return np.array([-a - c, 0, c + e])
             def W_theta(a, c, e, th=theta_rad):
-                w3 = W3(a, c, e)
-                w2 = W2(a, c, e)
-                return np.cos(th) * w3 + np.sin(th) * w2
+                alpha  = np.sin(phi_rad)
+                beta   = np.cos(phi_rad) * np.sin(th)
+                gamma_ = np.cos(phi_rad) * np.cos(th)
+                return (alpha  * W1(a, c, e) +
+                        beta   * W2(a, c, e) +
+                        gamma_ * W3(a, c, e))
             vecs_list.append(np.array([W_theta(*p) for p in pts]))
         if show_combined_vector_field:
+            def W1(a, c, e):
+                # Linear field orthogonal to the W2–W3 shear plane
+                return np.array([0, -a - c, a + e])
             def V_can(a, c, e):
                 return np.array([a * a - c * e, c * c - a * e, e * e - a * c])
             def W3(a, c, e):
                 return np.array([c - e, e - a, a - c])
             def W2(a, c, e):
-                return np.array([- a - a, 0, c + e])
+                return np.array([-a - c, 0, c + e])
             def W_theta(a, c, e, th):
-                w3 = W3(a, c, e)
-                w2 = W2(a, c, e)
-                return np.cos(th) * w3 + np.sin(th) * w2
+                alpha  = np.sin(phi_rad)
+                beta   = np.cos(phi_rad) * np.sin(th)
+                gamma_ = np.cos(phi_rad) * np.cos(th)
+                return (alpha  * W1(a, c, e) +
+                        beta   * W2(a, c, e) +
+                        gamma_ * W3(a, c, e))
             def V_combined(a, c, e, eps=epsilon, th=theta_rad):
                 return V_can(a, c, e) + eps * W_theta(a, c, e, th)
             vecs_list.append(np.array([V_combined(*p) for p in pts]))
@@ -632,6 +650,44 @@ def make_plot(
                 length=0.1 * z_bound_pos, normalize=True, arrow_length_ratio=0.4,
                 cmap=field_cmap, norm=norm_mag, array=mag,
                 linewidth=0.8, alpha=0.9)
+
+    # --- Visualise W₁, W₂, W₃ at the same quiver sample points ---------
+    if show_W_basis_fields:
+        # Re‑use the quiver cloud 'pts' if it exists; otherwise build a small fallback set
+        if 'pts' in locals():
+            basis_pts = pts
+        else:
+            rng_basis = npr.default_rng(17)
+            N_basis   = 200
+            r_vals    = (np.sqrt(np.sqrt(rng_basis.random(N_basis))) * s_max)
+            theta_vals= rng_basis.uniform(0, 2*np.pi, N_basis)
+            signs     = rng_basis.choice([-1, 1], size=N_basis)
+            s_vals    = signs * r_vals
+            alpha_vals= np.sqrt(2) * s_vals * np.cos(theta_vals)
+            beta_vals = np.sqrt(2) * s_vals * np.sin(theta_vals)
+            basis_pts = (
+                s_vals[:,None]    * ell_unit +
+                alpha_vals[:,None]* v1 +
+                beta_vals[:,None] * v2
+            )
+
+        # Linear shear fields
+        def W1(a, c, e): return np.array([0,      -a - c,  a + e])
+        def W2(a, c, e): return np.array([-a - c,  0,      c + e])
+        def W3(a, c, e): return np.array([c - e,   e - a,  a - c])
+
+        colours = ['red', 'green', 'blue']        # distinguish W₁,W₂,W₃
+        scale_factor_basis = 0.05                 # shrink arrows to 5 %
+        for p in basis_pts:
+            vecs_basis = [W1(*p), W2(*p), W3(*p)]
+            for vec, col in zip(vecs_basis, colours):
+                origin = _rot(p)
+                tip    = _rot(p + scale_factor_basis * vec)
+                dvec   = tip - origin
+                ax.quiver(origin[0], origin[1], origin[2],
+                          dvec[0], dvec[1], dvec[2],
+                          color=col, linewidth=0.8,
+                          alpha=0.8, arrow_length_ratio=0.09)
 
     return fig
 
@@ -695,14 +751,19 @@ with st.sidebar.expander("Quadratic Cone", expanded=True):
 
 with st.sidebar.expander("Vector Fields", expanded=True):
     st.markdown("### Parameters")
-    theta_deg = st.slider("Expansion θ°", 0, 360, value=60, step=1)
-    epsilon = st.slider("Shear ε", -4.0, 4.0, value=3/(2*np.sqrt(6)), step=0.01)
+    theta_deg = st.slider("Shear Angle θ°", 0, 360, value=0, step=1)
+    phi_deg   = st.slider("Tilt angle φ°", 0, 360, value=0, step=1)
+    epsilon = st.slider("Shear Strength ε", -4.0, 4.0, value=3/(2*np.sqrt(6)), step=0.01)
     st.markdown("### Options")
     quiver_num = st.slider("Quiver Density", 10, 1000, value=500, step=5)
-    show_basis = st.checkbox("Show Linear Basis Vectors", value=False)
-    show_vectors3d = st.checkbox("Show Field Vectors", value=True)
+    # show_vectors3d = st.checkbox("Show Field Vectors", value=True)
     show_canonical_vector_field = st.checkbox("Canonical Field Vectors", value=False)
     show_shear_vector_field = st.checkbox("Shear Field Vectors", value=False)
+    # Indented basis‑choice checkboxes
+    col_pad, col_chk = st.columns([0.10, 0.90])
+    with col_chk:
+        show_basis = st.checkbox("Basis in Screen", value=False)
+        show_W_basis_fields = st.checkbox("Basis at points", value=False)
     show_combined_vector_field = st.checkbox("Combined Deformation Vectors", value=False)
 
 
@@ -715,6 +776,7 @@ fig = make_plot(
     elevation=elevation,
     azimuth=azimuth,
     theta_deg=theta_deg,
+    phi_deg=phi_deg,
     epsilon=epsilon,
     quadratic_value=quadratic_value,
     scale_factor=scale_factor,
@@ -724,7 +786,7 @@ fig = make_plot(
     show_cone=show_cone,
     show_wireframe=show_wireframe,
     show_basis=show_basis,
-    show_vectors3d=show_vectors3d,
+    show_vectors3d=True,
     show_canonical_vector_field=show_canonical_vector_field,
     show_shear_vector_field=show_shear_vector_field,
     show_combined_vector_field=show_combined_vector_field,
