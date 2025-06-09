@@ -595,22 +595,26 @@ def make_plot(
                 return np.array([a * a - c * e, c * c - a * e, e * e - a * c])
             vecs_list.append(np.array([V_can(*p) for p in pts]))
         if show_shear_vector_field:
-            def W0(a, c, e):
+            def W3(a, c, e):
                 return np.array([c - e, e - a, a - c])
+            def W2(a, c, e):
+                return np.array([- a - a, 0, c + e])
             def W_theta(a, c, e, th=theta_rad):
-                w0 = W0(a, c, e)
-                w1 = np.roll(w0, -1)
-                return np.cos(th) * w0 + np.sin(th) * w1
+                w3 = W3(a, c, e)
+                w2 = W2(a, c, e)
+                return np.cos(th) * w3 + np.sin(th) * w2
             vecs_list.append(np.array([W_theta(*p) for p in pts]))
         if show_combined_vector_field:
             def V_can(a, c, e):
                 return np.array([a * a - c * e, c * c - a * e, e * e - a * c])
-            def W0(a, c, e):
+            def W3(a, c, e):
                 return np.array([c - e, e - a, a - c])
+            def W2(a, c, e):
+                return np.array([- a - a, 0, c + e])
             def W_theta(a, c, e, th):
-                w0 = W0(a, c, e)
-                w1 = np.roll(w0, -1)
-                return np.cos(th) * w0 + np.sin(th) * w1
+                w3 = W3(a, c, e)
+                w2 = W2(a, c, e)
+                return np.cos(th) * w3 + np.sin(th) * w2
             def V_combined(a, c, e, eps=epsilon, th=theta_rad):
                 return V_can(a, c, e) + eps * W_theta(a, c, e, th)
             vecs_list.append(np.array([V_combined(*p) for p in pts]))
