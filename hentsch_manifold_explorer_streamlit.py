@@ -987,10 +987,10 @@ with st.sidebar.expander("**GIF Animation**", expanded=False):
             unsafe_allow_html=True
         )
         # Convert GIF to MP4 and offer download
-        mp4_file = output_file.replace(".gif", ".mp4")
-        convert_gif_to_mp4(output_file, mp4_file)
-        with open(mp4_file, "rb") as fmp4:
-            st.download_button("Download MP4", fmp4, file_name="streamlit_animation.mp4", mime="video/mp4")
+        # mp4_file = output_file.replace(".gif", ".mp4")
+        # convert_gif_to_mp4(output_file, mp4_file)
+        # with open(mp4_file, "rb") as fmp4:
+        #     st.download_button("Download MP4", fmp4, file_name="streamlit_animation.mp4", mime="video/mp4")
 
     # --- Dual-Parameter Animation UI ---
     st.markdown("### Dual-Parameter Animation")
@@ -1020,9 +1020,9 @@ with st.sidebar.expander("**GIF Animation**", expanded=False):
             unsafe_allow_html=True
         )
         # Convert dual GIF to MP4 and offer download
-        mp4_file2 = output_file2.replace(".gif", ".mp4")
-        convert_gif_to_mp4(output_file2, mp4_file2)
-        with open(mp4_file2, "rb") as fmp4_2:
-            st.download_button("Download Dual MP4", fmp4_2, file_name="streamlit_dual_animation.mp4", mime="video/mp4")
+        # mp4_file2 = output_file2.replace(".gif", ".mp4")
+        # convert_gif_to_mp4(output_file2, mp4_file2)
+        # with open(mp4_file2, "rb") as fmp4_2:
+        #     st.download_button("Download Dual MP4", fmp4_2, file_name="streamlit_dual_animation.mp4", mime="video/mp4")
 
 st.pyplot(fig)
