@@ -56,6 +56,10 @@
 # In[1]:
 
 
+import base64
+import imageio.v2 as imageio
+import tempfile
+import os
 # --- Phase portraits of the projected flow on the Hentsch screen ---
 from pathlib import Path
 
@@ -165,6 +169,9 @@ def make_phase_plot(
     jitter: float = 0.1,
     view_span: float = 5.0,
     color_mode: str = "cosine",
+    return_fig: bool = False,
+    bidirectional: bool = False,
+    t_min: float = 0.0,
 ):
     """
     Generate a phase portrait of the projected flow on the Hentsch screen
@@ -481,79 +488,150 @@ def make_phase_plot(
     accel_max_traj = 0.0
     global_curv_values = []  # gather for global colour scale
     for u1_0, u2_0 in starts:
-        traj = np.empty((nt, 2))  # store the trajectory points
-        scal = np.empty(nt - 1)  # directional cosine (cosine mode)
-        scal_speed = np.empty(nt - 1)  # instantaneous speed   (speed mode)
-        scal_angle = np.empty(nt - 1)  # polar angle  (angle mode)
-        scal_time = np.empty(nt - 1)  # λ‑time         (time mode)
-        scal_acc = np.empty(nt - 1)  # acceleration   (accel mode)
-        scal_curv = np.empty(nt - 1)  # curvature scalar
-        sep_pts = []  # store positions where ⟨u,ẋ⟩≈0
-        u1, u2 = u1_0, u2_0
-        traj[0] = (u1, u2)
-        t = 0.0
-        # ----- initial velocity for accel mode -----
-        v1_prev, v2_prev = vec_field(u1, u2, eps, theta)
-        for k in range(1, nt):  # time-stepping loop
-            v1, v2 = vec_field(u1, u2, eps, theta)  # vector field
-            u1 += h * v1
-            u2 += h * v2
-            # Clip coordinates to avoid runaway values that cause overflow
-            u1 = np.clip(u1, -OVERFLOW_LIMIT, OVERFLOW_LIMIT)
-            u2 = np.clip(u2, -OVERFLOW_LIMIT, OVERFLOW_LIMIT)
-            t += h
-            traj[k] = (u1, u2)
-            # ----- directional cosine for colour -----
-            speed_seg = np.hypot(v1, v2) + 1e-12  # avoid division by zero
-            cos_alpha = (u1 * v1 + u2 * v2) / (np.hypot(u1, u2) * speed_seg)
-            scal_speed[k - 1] = speed_seg  # store for "speed" mode
-            scal[k - 1] = cos_alpha  # default cosine scalar
-            # ---- detect separatrix crossing (cosα = 0) ----
-            if k > 1:
-                if scal[k - 2] * cos_alpha < 0:  # sign change ⇒ crossed
-                    # linear interpolation for better estimate
-                    w = abs(scal[k - 2]) / (abs(scal[k - 2]) + abs(cos_alpha))
-                    x_sep = (1 - w) * traj[k - 1, 0] + w * u1
-                    y_sep = (1 - w) * traj[k - 1, 1] + w * u2
-                    sep_pts.append((x_sep, y_sep))
-            # ----- polar angle for "angle" mode -----
-            phi_seg = np.arctan2(u2, u1)  # range (-π, π]
-            scal_angle[k - 1] = phi_seg
-            # ----- λ-time for "time" mode -----
-            scal_time[k - 1] = t  # store current λ for "time" mode
-            # ----- acceleration magnitude for "accel" mode -----
-            acc_seg = np.hypot(v1 - v1_prev, v2 - v2_prev) / h
-            scal_acc[k - 1] = acc_seg
-            accel_max_traj = max(accel_max_traj, acc_seg)
-            # ----- affine‑shifted curvature κ(u) = uᵀ S u / |u|²  (scale‑safe) -----
-            cos_t, sin_t = np.cos(theta), np.sin(theta)
-            R11 = eps / np.sqrt(6.0) * (4 * cos_t**2 + sin_t**2)
-            R22 = eps / np.sqrt(6.0) * (4 * sin_t**2 + cos_t**2)
-            R12 = eps / np.sqrt(6.0) * 3 * cos_t * sin_t
-            trace_R = 5 * eps / np.sqrt(6.0)
-            shift = (1.0 / 6.0) - trace_R / 3.0
-            S11, S22, S12 = R11 + shift, R22 + shift, R12
-
-            r2 = u1 * u1 + u2 * u2 + 1e-12          # avoid div‑by‑zero
-            inv_r = 1.0 / np.sqrt(r2)
-            nx, ny = u1 * inv_r, u2 * inv_r          # normalised coordinate
-            scal_curv[k - 1] = S11 * nx * nx + 2 * S12 * nx * ny + S22 * ny * ny
-            v1_prev, v2_prev = v1, v2  # update for next step
-        global_curv_values.extend(scal_curv.tolist())
-        segs = np.column_stack([traj[:-1], traj[1:]]).reshape(-1, 2, 2)
-        traj_store.append(
-            (
-                segs,
-                scal.copy(),  # cosine
-                scal_speed.copy(),  # speed
-                scal_angle.copy(),  # angle
-                scal_time.copy(),  # time
-                scal_acc.copy(),  # accel
-                scal_curv.copy(),  # curvature
-                sep_pts,  # separatrix points
-                alpha_seg,
+        if bidirectional:
+            # integrate backward
+            traj_backward = np.empty((nt, 2))
+            u1, u2 = u1_0, u2_0
+            for k in range(nt):
+                traj_backward[k] = (u1, u2)
+                v1, v2 = vec_field(u1, u2, eps, theta)
+                u1 -= h * v1
+                u2 -= h * v2
+                u1 = np.clip(u1, -OVERFLOW_LIMIT, OVERFLOW_LIMIT)
+                u2 = np.clip(u2, -OVERFLOW_LIMIT, OVERFLOW_LIMIT)
+            # integrate forward
+            traj_forward = np.empty((nt, 2))
+            u1, u2 = u1_0, u2_0
+            for k in range(nt):
+                traj_forward[k] = (u1, u2)
+                v1, v2 = vec_field(u1, u2, eps, theta)
+                u1 += h * v1
+                u2 += h * v2
+                u1 = np.clip(u1, -OVERFLOW_LIMIT, OVERFLOW_LIMIT)
+                u2 = np.clip(u2, -OVERFLOW_LIMIT, OVERFLOW_LIMIT)
+            traj_combined = np.vstack((traj_backward[::-1][:-1], traj_forward))
+            traj = traj_combined
+            n_traj = traj.shape[0]
+            scal = np.empty(n_traj - 1)
+            scal_speed = np.empty(n_traj - 1)
+            scal_angle = np.empty(n_traj - 1)
+            scal_time = np.empty(n_traj - 1)
+            scal_acc = np.empty(n_traj - 1)
+            scal_curv = np.empty(n_traj - 1)
+            sep_pts = []
+            t = -t_max
+            v1_prev, v2_prev = vec_field(traj[0, 0], traj[0, 1], eps, theta)
+            for k in range(1, n_traj):
+                u1, u2 = traj[k, 0], traj[k, 1]
+                v1, v2 = vec_field(u1, u2, eps, theta)
+                speed_seg = np.hypot(v1, v2) + 1e-12
+                cos_alpha = (u1 * v1 + u2 * v2) / (np.hypot(u1, u2) * speed_seg)
+                scal_speed[k - 1] = speed_seg
+                scal[k - 1] = cos_alpha
+                if k > 1:
+                    if scal[k - 2] * cos_alpha < 0:
+                        w = abs(scal[k - 2]) / (abs(scal[k - 2]) + abs(cos_alpha))
+                        x_sep = (1 - w) * traj[k - 1, 0] + w * u1
+                        y_sep = (1 - w) * traj[k - 1, 1] + w * u2
+                        sep_pts.append((x_sep, y_sep))
+                phi_seg = np.arctan2(u2, u1)
+                scal_angle[k - 1] = phi_seg
+                scal_time[k - 1] = t
+                acc_seg = np.hypot(v1 - v1_prev, v2 - v2_prev) / h
+                scal_acc[k - 1] = acc_seg
+                accel_max_traj = max(accel_max_traj, acc_seg)
+                cos_t, sin_t = np.cos(theta), np.sin(theta)
+                R11 = eps / np.sqrt(6.0) * (4 * cos_t**2 + sin_t**2)
+                R22 = eps / np.sqrt(6.0) * (4 * sin_t**2 + cos_t**2)
+                R12 = eps / np.sqrt(6.0) * 3 * cos_t * sin_t
+                trace_R = 5 * eps / np.sqrt(6.0)
+                shift = (1.0 / 6.0) - trace_R / 3.0
+                S11, S22, S12 = R11 + shift, R22 + shift, R12
+                r2 = u1 * u1 + u2 * u2 + 1e-12
+                inv_r = 1.0 / np.sqrt(r2)
+                nx, ny = u1 * inv_r, u2 * inv_r
+                scal_curv[k - 1] = S11 * nx * nx + 2 * S12 * nx * ny + S22 * ny * ny
+                v1_prev, v2_prev = v1, v2
+                t += h
+            global_curv_values.extend(scal_curv.tolist())
+            segs = np.column_stack([traj[:-1], traj[1:]]).reshape(-1, 2, 2)
+            traj_store.append(
+                (
+                    segs,
+                    scal.copy(),
+                    scal_speed.copy(),
+                    scal_angle.copy(),
+                    scal_time.copy(),
+                    scal_acc.copy(),
+                    scal_curv.copy(),
+                    sep_pts,
+                    alpha_seg,
+                )
             )
-        )
+        else:
+            traj = np.empty((nt, 2))  # store the trajectory points
+            scal = np.empty(nt - 1)  # directional cosine (cosine mode)
+            scal_speed = np.empty(nt - 1)  # instantaneous speed   (speed mode)
+            scal_angle = np.empty(nt - 1)  # polar angle  (angle mode)
+            scal_time = np.empty(nt - 1)  # λ‑time         (time mode)
+            scal_acc = np.empty(nt - 1)  # acceleration   (accel mode)
+            scal_curv = np.empty(nt - 1)  # curvature scalar
+            sep_pts = []  # store positions where ⟨u,ẋ⟩≈0
+            u1, u2 = u1_0, u2_0
+            traj[0] = (u1, u2)
+            t = 0.0
+            v1_prev, v2_prev = vec_field(u1, u2, eps, theta)
+            for k in range(1, nt):  # time-stepping loop
+                v1, v2 = vec_field(u1, u2, eps, theta)  # vector field
+                u1 += h * v1
+                u2 += h * v2
+                u1 = np.clip(u1, -OVERFLOW_LIMIT, OVERFLOW_LIMIT)
+                u2 = np.clip(u2, -OVERFLOW_LIMIT, OVERFLOW_LIMIT)
+                t += h
+                traj[k] = (u1, u2)
+                speed_seg = np.hypot(v1, v2) + 1e-12
+                cos_alpha = (u1 * v1 + u2 * v2) / (np.hypot(u1, u2) * speed_seg)
+                scal_speed[k - 1] = speed_seg
+                scal[k - 1] = cos_alpha
+                if k > 1:
+                    if scal[k - 2] * cos_alpha < 0:
+                        w = abs(scal[k - 2]) / (abs(scal[k - 2]) + abs(cos_alpha))
+                        x_sep = (1 - w) * traj[k - 1, 0] + w * u1
+                        y_sep = (1 - w) * traj[k - 1, 1] + w * u2
+                        sep_pts.append((x_sep, y_sep))
+                phi_seg = np.arctan2(u2, u1)
+                scal_angle[k - 1] = phi_seg
+                scal_time[k - 1] = t
+                acc_seg = np.hypot(v1 - v1_prev, v2 - v2_prev) / h
+                scal_acc[k - 1] = acc_seg
+                accel_max_traj = max(accel_max_traj, acc_seg)
+                cos_t, sin_t = np.cos(theta), np.sin(theta)
+                R11 = eps / np.sqrt(6.0) * (4 * cos_t**2 + sin_t**2)
+                R22 = eps / np.sqrt(6.0) * (4 * sin_t**2 + cos_t**2)
+                R12 = eps / np.sqrt(6.0) * 3 * cos_t * sin_t
+                trace_R = 5 * eps / np.sqrt(6.0)
+                shift = (1.0 / 6.0) - trace_R / 3.0
+                S11, S22, S12 = R11 + shift, R22 + shift, R12
+                r2 = u1 * u1 + u2 * u2 + 1e-12
+                inv_r = 1.0 / np.sqrt(r2)
+                nx, ny = u1 * inv_r, u2 * inv_r
+                scal_curv[k - 1] = S11 * nx * nx + 2 * S12 * nx * ny + S22 * ny * ny
+                v1_prev, v2_prev = v1, v2
+            global_curv_values.extend(scal_curv.tolist())
+            segs = np.column_stack([traj[:-1], traj[1:]]).reshape(-1, 2, 2)
+            traj_store.append(
+                (
+                    segs,
+                    scal.copy(),
+                    scal_speed.copy(),
+                    scal_angle.copy(),
+                    scal_time.copy(),
+                    scal_acc.copy(),
+                    scal_curv.copy(),
+                    sep_pts,
+                    alpha_seg,
+                )
+            )
     # --- color the segments by the directional cosines, speed, or angle
     norm_panel = colors.Normalize(vmin=-1.0, vmax=1.0)  # directional cosine ∈ [−1,1]
     accel_max = accel_max_traj or 1.0
@@ -646,8 +724,11 @@ def make_phase_plot(
     # --------------------------------------------------------------
     #  Plot the figure
     # --------------------------------------------------------------
-    fig.tight_layout()  # adjust layout to fit
-    st.pyplot(fig)
+    fig.tight_layout()
+    if return_fig:
+        return fig
+    else:
+        st.pyplot(fig)
 
 
 # --- Streamlit UI in main() ---
@@ -655,7 +736,8 @@ def main():
     st.title("Screen Phase Portrait Explorer")
     st.sidebar.header("Phase Portrait Settings")
     color_mode = st.sidebar.selectbox(
-        "**Diagnostic scalar**", ["cosine", "speed", "angle", "time", "accel", "curvature"]
+        "**Diagnostic scalar**", ["cosine", "speed", "angle", "time", "accel", "curvature"],
+        help="Choose how to color the trajectory segments.",
     )
     with st.sidebar.expander("**Parameters**", expanded=True):
             # -------- Define the interaction handlers for the number box and slider
@@ -691,9 +773,39 @@ def main():
         )
         eps = val
 
-        theta = st.slider(
-            "shear direction θ (rad)", 0.0, float(2 * np.pi), value=0.0, step=0.01
+        # --- Synchronized theta controls in degrees and radians ---
+        def theta_deg_box_changed():
+            val = np.deg2rad(st.session_state.get("theta_deg_box", 0.0))
+            st.session_state["theta_rad"] = val
+        def theta_slider_changed():
+            val = st.session_state.get("theta_slider_deg", 0.0)
+            st.session_state["theta_deg_box"] = val
+            st.session_state["theta_rad"] = np.deg2rad(val)
+
+        # --- Ensure theta-related session state keys exist ---
+        if "theta_rad" not in st.session_state:
+            st.session_state["theta_rad"] = 0.0
+            st.session_state["theta_deg_box"] = 0.0
+            st.session_state["theta_slider_deg"] = 0.0
+
+        theta_val_deg = np.rad2deg(st.session_state.get("theta_rad", 0.0))
+        theta_deg_box = st.number_input(
+            "Shear direction θ (degrees)",
+            0.0, 360.0,
+            value=theta_val_deg,
+            key="theta_deg_box",
+            step=1.0,
+            on_change=theta_deg_box_changed,
         )
+        theta_slider_deg = st.slider(
+            "Shear direction θ (slider)",
+            0.0, 360.0,
+            value=theta_val_deg,
+            key="theta_slider_deg",
+            step=1.0,
+            on_change=theta_slider_changed,
+        )
+        theta = st.session_state.get("theta_rad", 0.0)
 
     with st.sidebar.expander("**Visual aids**", expanded=False):
         show_separatrix    = st.checkbox("Separatrix", value=True)
@@ -713,15 +825,20 @@ def main():
         )
 
     with st.sidebar.expander("**Trajectory settings**", expanded=False):
+        bidirectional = st.checkbox("Bidirectional trajectories (±λ)", value=True)
+        if bidirectional:
+            t_min = -st.slider("minimum negative time", 1.0, 10.0, value=1.0, step=1.0)
+        else:
+            t_min = 0.0
         t_max = st.slider(
-            "maximum time (trajectory length)", 1.0, 100.0, value=20.0, step=1.0
+            "maximum positive time", 1.0, 100.0, value=20.0, step=1.0
         )
         nt = st.slider(
             "time steps (trajectory resolution)", 50, 2000, value=300, step=50
         )
         seed_base = st.slider("trajectory seeds", 1, 720, value=180, step=1)
         seed_radius = st.slider(
-            "seed distance from null point", 0.01, 0.4, value=0.05, step=0.005
+            "seed distance from null point", 0.01, 1.0, value=0.5, step=0.005
         )
         jitter = st.slider("jitter (seeding noise)", 0.0, 0.3, value=0.0, step=0.01)
 
@@ -730,6 +847,7 @@ def main():
         theta,
         ngrid=ngrid,
         t_max=t_max,
+        t_min=t_min,
         nt=nt,
         seed_base=seed_base,
         seed_radius=seed_radius,
@@ -742,7 +860,120 @@ def main():
         # show_eps_circle=show_eps_circle,
         show_eig_line=show_eig_line,
         show_separatrix=show_separatrix,
+        bidirectional=bidirectional,
     )
+
+    with st.sidebar.expander("**GIF Animation**", expanded=False):
+        st.markdown("### Animation Parameters")
+
+        animate_seed_base = st.checkbox("animate seed density", value=True)
+        if animate_seed_base:
+            seed_base_start = st.number_input("Seed base start", 1, 720, value=seed_base, step=1)
+            seed_base_end = st.number_input("Seed base end", 1, 720, value=seed_base, step=1)
+        else:
+            seed_base_anim = seed_base # st.slider("Trajectory seeds", 1, 720, value=seed_base, step=1)
+
+        animate_seed_radius = st.checkbox("animate seeding radius", value=True)
+        if animate_seed_radius:
+            seed_radius_start = st.number_input("Seed radius start", 0.01, 1.0, value=seed_radius, step=0.005, format="%.3f")
+            seed_radius_end = st.number_input("Seed radius end", 0.01, 1.0, value=seed_radius, step=0.005, format="%.3f")
+        else:
+            seed_radius_anim = seed_radius # st.slider("Seed distance from null", 0.01, 0.4, value=seed_radius, step=0.005)
+        eps_start = st.number_input("ε start", value=eps)
+        eps_end = st.number_input("ε end", value=eps*2)
+        theta_start_deg = st.number_input("θ start (degrees)", value=theta, step=1.0)
+        theta_end_deg = st.number_input("θ end (degrees)", value=theta+90, step=1.0)
+        theta_start = np.deg2rad(theta_start_deg)
+        theta_end = np.deg2rad(theta_end_deg)
+        n_frames = st.number_input("Number of increments", min_value=2, value=20, step=1)
+        bounce = st.checkbox("Bounce (ping-pong loop)", value=True)
+
+        generate = st.button("Generate Animated GIF")
+
+        if generate:
+            eps_vals = np.linspace(eps_start, eps_end, n_frames)
+            theta_vals = np.linspace(theta_start, theta_end, n_frames)
+            # Compute per-frame values for animated seeds and radius
+            if animate_seed_base:
+                seed_base_values = np.linspace(seed_base_start, seed_base_end, n_frames).astype(int)
+            else:
+                seed_base_values = [seed_base_anim] * n_frames
+
+            if animate_seed_radius:
+                seed_radius_values = np.linspace(seed_radius_start, seed_radius_end, n_frames)
+            else:
+                seed_radius_values = [seed_radius_anim] * n_frames
+
+            output_file = generate_bounce_gif(
+                eps_vals,
+                theta_vals,
+                ngrid=ngrid,
+                t_max=t_max,
+                t_min=t_min,
+                nt=nt,
+                seed_base_values=seed_base_values,
+                seed_radius_values=seed_radius_values,
+                jitter=jitter,
+                view_span=view_span,
+                color_mode=color_mode,
+                center_mode=center_mode,
+                show_null_circle=show_null_circle,
+                show_eig_line=show_eig_line,
+                show_separatrix=show_separatrix,
+                bounce=bounce,
+                bidirectional=bidirectional,
+            )
+            with open(output_file, "rb") as f:
+                gif_bytes = f.read()
+                b64_gif = base64.b64encode(gif_bytes).decode()
+
+            st.download_button("Download Animated GIF", gif_bytes, file_name="phase_portrait_bounce.gif", mime="image/gif")
+            st.markdown(
+                f'<img src="data:image/gif;base64,{b64_gif}" style="width:100%;" loop autoplay>',
+                unsafe_allow_html=True
+            )
+
+
+def generate_bounce_gif(
+    eps_values,
+    theta_values,
+    filename="phase_portrait_bounce.gif",
+    duration=0.1,
+    bounce=True,
+    seed_base_values=None,
+    seed_radius_values=None,
+    **kwargs
+):
+    with tempfile.TemporaryDirectory() as tmpdir:
+        images = []
+        progress = st.progress(0)
+        status = st.empty()
+        n_frames = len(eps_values)
+        for i, (eps, theta) in enumerate(zip(eps_values, theta_values)):
+            # Use per-frame seed_base and seed_radius if provided
+            frame_kwargs = kwargs.copy()
+            if seed_base_values is not None:
+                frame_kwargs['seed_base'] = seed_base_values[i]
+            if seed_radius_values is not None:
+                frame_kwargs['seed_radius'] = seed_radius_values[i]
+            fig = make_phase_plot(
+                eps,
+                theta,
+                return_fig=True,
+                **frame_kwargs,
+            )
+            path = os.path.join(tmpdir, f"frame_{len(images):03d}.png")
+            fig.savefig(path)
+            plt.close(fig)
+            images.append(imageio.imread(path))
+            progress.progress((i + 1) / n_frames)
+            status.text(f"Generating frame {i + 1} of {n_frames}")
+        if bounce:
+            images = images + images[-2::-1]
+        imageio.mimsave(filename, images, duration=duration, loop=0)
+        progress.empty()
+        status.empty()
+        return filename
 
 
 if __name__ == "__main__":

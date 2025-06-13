@@ -57,6 +57,8 @@ import matplotlib.colors as mcolors
 import numpy.random as npr
 from numpy.linalg import inv
 import streamlit as st
+import base64
+import subprocess
 
 st.set_page_config(layout="wide")
 # ----------------------------------------------------------------------
@@ -201,6 +203,9 @@ def make_plot(
     show_planes,
     show_screen_planes,
     show_axes_dict,
+    quiver_normalize,
+    uniform_quiver_seed,
+    upper_nape_only
 ):
     fig = plt.figure(figsize=CFG["figsize"], dpi=CFG["dpi"])
     ax = fig.add_subplot(111, projection='3d')
@@ -299,7 +304,7 @@ def make_plot(
     ax.set_zlabel(z_label)
     ax.view_init(elev=elevation, azim=azimuth)
     ax.set_title(
-    f"θ = {theta_deg:.1f}°,  ε = {epsilon:.3f},  Q = {quadratic_value:.2f},  scale = {scale_factor:.2f}",
+    f"θ = {theta_deg:.1f}°,  ϕ = {phi_deg:.1f}°,  ε = {epsilon:.3f},  Q = {quadratic_value:.2f},  scale = {scale_factor:.2f}",
     fontsize=6, loc='center'
 )
 
@@ -573,83 +578,104 @@ def make_plot(
             ax.text(*angle_label_pos, r'$\theta = \tan^{-1}(\sqrt{2})$', fontsize=8, color='k')
 
     # 3D cone-preserving vector field
-    if show_vectors3d:
+    s_max = max(x_bound_pos, y_bound_pos, z_bound_pos)
+    v1 = np.array([1, -1, 0]) / np.sqrt(2)
+    v2 = np.array([1, 1, -2]) / np.sqrt(6)
+
+    if uniform_quiver_seed:
+        N_slices = max(4, int(quiver_num / 36))
+        N_rings = max(4, int(quiver_num / 36))
+        pts = []
+        s_vals = np.linspace(-s_max, s_max, N_slices)
+        s_vals = s_vals[np.abs(s_vals) > 1e-4]  # avoid s ≈ 0 which gives r ≈ 0
+        for s in s_vals:
+            r = np.sqrt(2) * abs(s)
+            num_theta = max(4, int(N_rings * r / s_max))
+            theta_vals = np.linspace(0, 2*np.pi, num_theta, endpoint=True)
+            for theta in theta_vals:
+                p = (
+                    s * ell_unit +
+                    r * np.cos(theta) * v1 +
+                    r * np.sin(theta) * v2
+                )
+                pts.append(p)
+        pts = np.array(pts)
+    else:
         rng = npr.default_rng(8)
         N_pts = quiver_num
-        s_max = max(x_bound_pos, y_bound_pos, z_bound_pos)
         radial_bias = 0.5
-
-        v1 = np.array([1, -1, 0]) / np.sqrt(2)
-        v2 = np.array([1, 1, -2]) / np.sqrt(6)
-
-        u_rand     = rng.random(N_pts)
-        r_vals     = s_max * u_rand**radial_bias
-        signs      = rng.choice([-1, 1], size=N_pts)
-        s_vals     = signs * r_vals
+        u_rand = rng.random(N_pts)
+        r_vals = s_max * u_rand**radial_bias
+        signs = rng.choice([-1, 1], size=N_pts)
+        s_vals = signs * r_vals
         theta_vals = rng.uniform(0, 2*np.pi, N_pts)
         alpha_vals = np.sqrt(2) * s_vals * np.cos(theta_vals)
         beta_vals  = np.sqrt(2) * s_vals * np.sin(theta_vals)
-
         pts = (
             s_vals[:,None]  * ell_unit +
             alpha_vals[:,None] * v1 +
             beta_vals[:,None]  * v2
         )
-        vecs_list = []
-        if show_canonical_vector_field:
-            def V_can(a, c, e):
-                return np.array([a * a - c * e, c * c - a * e, e * e - a * c])
-            vecs_list.append(np.array([V_can(*p) for p in pts]))
-        if show_shear_vector_field:
-            def W1(a, c, e):
-                # Linear field orthogonal to the W2–W3 shear plane
-                return np.array([0, -a - c, a + e])
-            def W3(a, c, e):
-                return np.array([c - e, e - a, a - c])
-            def W2(a, c, e):
-                return np.array([-a - c, 0, c + e])
-            def W_theta(a, c, e, th=theta_rad):
-                alpha  = np.sin(phi_rad)
-                beta   = np.cos(phi_rad) * np.sin(th)
-                gamma_ = np.cos(phi_rad) * np.cos(th)
-                return (alpha  * W1(a, c, e) +
-                        beta   * W2(a, c, e) +
-                        gamma_ * W3(a, c, e))
-            vecs_list.append(np.array([W_theta(*p) for p in pts]))
-        if show_combined_vector_field:
-            def W1(a, c, e):
-                # Linear field orthogonal to the W2–W3 shear plane
-                return np.array([0, -a - c, a + e])
-            def V_can(a, c, e):
-                return np.array([a * a - c * e, c * c - a * e, e * e - a * c])
-            def W3(a, c, e):
-                return np.array([c - e, e - a, a - c])
-            def W2(a, c, e):
-                return np.array([-a - c, 0, c + e])
-            def W_theta(a, c, e, th):
-                alpha  = np.sin(phi_rad)
-                beta   = np.cos(phi_rad) * np.sin(th)
-                gamma_ = np.cos(phi_rad) * np.cos(th)
-                return (alpha  * W1(a, c, e) +
-                        beta   * W2(a, c, e) +
-                        gamma_ * W3(a, c, e))
-            def V_combined(a, c, e, eps=epsilon, th=theta_rad):
-                return V_can(a, c, e) + eps * W_theta(a, c, e, th)
-            vecs_list.append(np.array([V_combined(*p) for p in pts]))
-        for vecs in vecs_list:
-            pts_rot = _rot(pts)
-            vecs_rot = _rot(pts + vecs) - pts_rot
-            mag = np.linalg.norm(vecs_rot, axis=1)
-            # Clean up invalid values in mag and vecs_rot
-            mag = np.nan_to_num(mag, nan=0.0, posinf=0.0, neginf=0.0)  # clean up invalid values
-            vecs_rot = np.nan_to_num(vecs_rot, nan=0.0, posinf=0.0, neginf=0.0)
-            norm_mag = mcolors.Normalize(vmin=mag.min(), vmax=mag.max() * 1.2)
-            ax.quiver(
-                pts_rot[:, 0], pts_rot[:, 1], pts_rot[:, 2],
-                vecs_rot[:, 0], vecs_rot[:, 1], vecs_rot[:, 2],
-                length=0.1 * z_bound_pos, normalize=True, arrow_length_ratio=0.4,
-                cmap=field_cmap, norm=norm_mag, array=mag,
-                linewidth=0.8, alpha=0.9)
+
+    # --- Vector field construction (vecs_list population) ---
+    vecs_list = []
+    if show_canonical_vector_field:
+        def V_can(a, c, e):
+            return np.array([a * a - c * e, c * c - a * e, e * e - a * c])
+        vecs_list.append(np.array([V_can(*p) for p in pts]))
+    if show_shear_vector_field:
+        def W1(a, c, e):
+            return np.array([0, -a - c, a + e])
+        def W3(a, c, e):
+            return np.array([c - e, e - a, a - c])
+        def W2(a, c, e):
+            return np.array([-a - c, 0, c + e])
+        def W_theta(a, c, e, th=theta_rad):
+            alpha  = np.sin(phi_rad)
+            beta   = np.cos(phi_rad) * np.sin(th)
+            gamma_ = np.cos(phi_rad) * np.cos(th)
+            return (alpha  * W1(a, c, e) +
+                    beta   * W2(a, c, e) +
+                    gamma_ * W3(a, c, e))
+        vecs_list.append(np.array([W_theta(*p) for p in pts]))
+    if show_combined_vector_field:
+        def W1(a, c, e):
+            return np.array([0, -a - c, a + e])
+        def V_can(a, c, e):
+            return np.array([a * a - c * e, c * c - a * e, e * e - a * c])
+        def W3(a, c, e):
+            return np.array([c - e, e - a, a - c])
+        def W2(a, c, e):
+            return np.array([-a - c, 0, c + e])
+        def W_theta(a, c, e, th=theta_rad):
+            alpha  = np.sin(phi_rad)
+            beta   = np.cos(phi_rad) * np.sin(th)
+            gamma_ = np.cos(phi_rad) * np.cos(th)
+            return (alpha  * W1(a, c, e) +
+                    beta   * W2(a, c, e) +
+                    gamma_ * W3(a, c, e))
+        def V_combined(a, c, e, eps=epsilon, th=theta_rad):
+            return V_can(a, c, e) + eps * W_theta(a, c, e, th)
+        vecs_list.append(np.array([V_combined(*p) for p in pts]))
+
+    if upper_nape_only:
+        mask = (pts[:, 0] + pts[:, 1] + pts[:, 2]) >= 0  # filter points with a + c + e >= 0
+        pts = pts[mask]
+        vecs_list = [v[mask] for v in vecs_list]
+    for vecs in vecs_list:
+        pts_rot = _rot(pts)
+        vecs_rot = _rot(pts + vecs) - pts_rot
+        mag = np.linalg.norm(vecs_rot, axis=1)
+        # Clean up invalid values in mag and vecs_rot
+        mag = np.nan_to_num(mag, nan=0.0, posinf=0.0, neginf=0.0)  # clean up invalid values
+        vecs_rot = np.nan_to_num(vecs_rot, nan=0.0, posinf=0.0, neginf=0.0)
+        norm_mag = mcolors.Normalize(vmin=mag.min(), vmax=mag.max() * 1.2)
+        ax.quiver(
+            pts_rot[:, 0], pts_rot[:, 1], pts_rot[:, 2],
+            vecs_rot[:, 0], vecs_rot[:, 1], vecs_rot[:, 2],
+            length=0.1 * z_bound_pos, normalize=quiver_normalize, arrow_length_ratio=0.4,
+            cmap=field_cmap, norm=norm_mag, array=mag,
+            linewidth=0.8, alpha=0.9)
 
     # --- Visualise W₁, W₂, W₃ at the same quiver sample points ---------
     if show_W_basis_fields:
@@ -695,14 +721,14 @@ def make_plot(
 # Streamlit sidebar UI
 # ==============================================================================
 st.title("Hentsch Manifold Visualization")
-st.sidebar.header("Plot Controls")
-with st.sidebar.expander("View Controls", expanded=True):
+st.sidebar.header("**Plot Controls**")
+with st.sidebar.expander("**View Controls**", expanded=True):
     projection_type = st.selectbox("Projection", options=['persp', 'ortho'], index=0)
     elevation = st.slider("Elevation°", -90, 90, value=20, step=1)
     azimuth = st.slider("Azimuth°", -180, 180, value=-45, step=1)
     reorient_vertical = st.checkbox("𝓵-axis Vertical", value=False)
 
-with st.sidebar.expander("Framework", expanded=False):
+with st.sidebar.expander("**Framework**", expanded=False):
     st.markdown("### Axes")
     show_axes_dict = {}
     for k in "abcdef":
@@ -710,7 +736,7 @@ with st.sidebar.expander("Framework", expanded=False):
     st.markdown("### Complex Planes")
     show_planes = st.checkbox("Show Complex Planes", value=False)
 
-with st.sidebar.expander("Quadratic Cone", expanded=True):
+with st.sidebar.expander("**Quadratic Cone**", expanded=True):
     show_cone = st.checkbox("Show Cone Surface", value=True)
     show_wireframe = st.checkbox("Show Cone Wireframe", value=True)
     # -------- Define the interaction handlers for the number box and slider
@@ -749,14 +775,17 @@ with st.sidebar.expander("Quadratic Cone", expanded=True):
     show_screen_planes = st.checkbox("Show Screen Plane", value=False)
     s_value = st.slider("Screen Plane s-value", -1.0, 1.0, value=0.0, step=0.01)
 
-with st.sidebar.expander("Vector Fields", expanded=True):
+with st.sidebar.expander("**Vector Fields**", expanded=True):
     st.markdown("### Parameters")
-    theta_deg = st.slider("Shear Angle θ°", 0, 360, value=0, step=1)
-    phi_deg   = st.slider("Tilt angle φ°", 0, 360, value=0, step=1)
+    theta_deg = st.slider("Shear Angle θ°", 0, 720, value=0, step=1)
+    phi_deg   = st.slider("Shear Angle φ°", 0, 720, value=0, step=1)
     epsilon = st.slider("Shear Strength ε", -4.0, 4.0, value=3/(2*np.sqrt(6)), step=0.01)
     st.markdown("### Options")
-    quiver_num = st.slider("Quiver Density", 10, 1000, value=500, step=5)
+    uniform_quiver_seed = st.checkbox("Use uniform quiver seeding", value=True)
+    quiver_num = st.slider("Quiver Density", 12, 4320, value=432, step=12)
     # show_vectors3d = st.checkbox("Show Field Vectors", value=True)
+    quiver_normalize = st.checkbox("Normalize Quiver Vectors", value=False)
+    upper_nape_only = st.checkbox("Show Upper Nape Only (ℓ ≥ 0)", value=False)
     show_canonical_vector_field = st.checkbox("Canonical Field Vectors", value=False)
     show_shear_vector_field = st.checkbox("Shear Field Vectors", value=False)
     # Indented basis‑choice checkboxes
@@ -793,9 +822,207 @@ fig = make_plot(
     show_planes=show_planes,
     show_screen_planes=show_screen_planes,
     show_axes_dict=show_axes_dict,
+    quiver_normalize=quiver_normalize,
+    uniform_quiver_seed=uniform_quiver_seed,
+    upper_nape_only=upper_nape_only,
 )
 if 'mag' in locals():
     # Optionally warn if there were invalid or extreme values
     if np.any(np.isnan(mag)) or np.any(np.isinf(mag)):
         st.warning("Plot contained invalid or extreme vector values that were sanitized.")
+
+# ==============================================================================
+# GIF Animation Controls and Generation
+# ==============================================================================
+import imageio.v2 as imageio
+import tempfile
+
+def generate_gif_animation(
+    param_name,
+    param_values,
+    filename="animation.gif",
+    duration=0.1,
+    bounce=True
+):
+    with tempfile.TemporaryDirectory() as tmpdir:
+        images = []
+        progress = st.progress(0)
+        status = st.empty()
+        for i, val in enumerate(param_values):
+            kwargs = {
+                "projection_type": projection_type,
+                "elevation": elevation,
+                "azimuth": azimuth,
+                "theta_deg": theta_deg,
+                "phi_deg": phi_deg,
+                "epsilon": epsilon,
+                "quadratic_value": quadratic_value,
+                "scale_factor": scale_factor,
+                "s_value": s_value,
+                "quiver_num": quiver_num,
+                "reorient_vertical": reorient_vertical,
+                "show_cone": show_cone,
+                "show_wireframe": show_wireframe,
+                "show_basis": show_basis,
+                "show_vectors3d": True,
+                "show_canonical_vector_field": show_canonical_vector_field,
+                "show_shear_vector_field": show_shear_vector_field,
+                "show_combined_vector_field": show_combined_vector_field,
+                "show_planes": show_planes,
+                "show_screen_planes": show_screen_planes,
+                "show_axes_dict": show_axes_dict,
+                "quiver_normalize": quiver_normalize,
+                "uniform_quiver_seed": uniform_quiver_seed,
+                "upper_nape_only": upper_nape_only,
+            }
+            kwargs[param_name] = val
+            fig = make_plot(**kwargs)
+            img_path = os.path.join(tmpdir, f"frame_{i:03d}.png")
+            fig.savefig(img_path)
+            plt.close(fig)
+            images.append(imageio.imread(img_path))
+            progress.progress((i + 1) / len(param_values))
+            status.text(f"Generating frame {i + 1} of {len(param_values)}")
+        if bounce:
+            images = images + images[-2::-1]
+        imageio.mimsave(filename, images, duration=duration, loop=0)
+        progress.empty()
+        status.empty()
+        return filename
+
+# --- Function to convert GIF to MP4 using ffmpeg ---
+def convert_gif_to_mp4(gif_path, mp4_path):
+    cmd = [
+        "ffmpeg",
+        "-y",  # overwrite without asking
+        "-i", gif_path,
+        "-movflags", "faststart",
+        "-pix_fmt", "yuv420p",
+        "-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2",
+        mp4_path,
+    ]
+    subprocess.run(cmd, check=True)
+
+# --- Dual-parameter GIF animation function ---
+def generate_gif_double_param(
+    param1_name,
+    param2_name,
+    param1_values,
+    param2_values,
+    filename="animation_double.gif",
+    duration=0.1,
+    bounce=True
+):
+    with tempfile.TemporaryDirectory() as tmpdir:
+        images = []
+        progress = st.progress(0)
+        status = st.empty()
+        for i, (val1, val2) in enumerate(zip(param1_values, param2_values)):
+            kwargs = {
+                "projection_type": projection_type,
+                "elevation": elevation,
+                "azimuth": azimuth,
+                "theta_deg": theta_deg,
+                "phi_deg": phi_deg,
+                "epsilon": epsilon,
+                "quadratic_value": quadratic_value,
+                "scale_factor": scale_factor,
+                "s_value": s_value,
+                "quiver_num": quiver_num,
+                "reorient_vertical": reorient_vertical,
+                "show_cone": show_cone,
+                "show_wireframe": show_wireframe,
+                "show_basis": show_basis,
+                "show_vectors3d": True,
+                "show_canonical_vector_field": show_canonical_vector_field,
+                "show_shear_vector_field": show_shear_vector_field,
+                "show_combined_vector_field": show_combined_vector_field,
+                "show_planes": show_planes,
+                "show_screen_planes": show_screen_planes,
+                "show_axes_dict": show_axes_dict,
+                "quiver_normalize": quiver_normalize,
+                "uniform_quiver_seed": uniform_quiver_seed,
+                "upper_nape_only": upper_nape_only,
+            }
+            kwargs[param1_name] = val1
+            kwargs[param2_name] = val2
+            fig = make_plot(**kwargs)
+            img_path = os.path.join(tmpdir, f"frame_{i:03d}.png")
+            fig.savefig(img_path)
+            plt.close(fig)
+            images.append(imageio.imread(img_path))
+            progress.progress((i + 1) / len(param1_values))
+            status.text(f"Generating frame {i + 1} of {len(param1_values)}")
+        if bounce:
+            images = images + images[-2::-1]
+        imageio.mimsave(filename, images, duration=duration, loop=0)
+        progress.empty()
+        status.empty()
+        return filename
+
+# ==============================================================================
+# Streamlit GIF Animation UI
+# ==============================================================================
+with st.sidebar.expander("**GIF Animation**", expanded=False):
+    bounce = st.checkbox("Bounce (ping-pong loop)", value=True)
+    st.markdown("### Single-Parameter Animation")
+    param_to_animate = st.selectbox(
+        "Parameter to animate",
+        ["theta_deg", "phi_deg", "epsilon", "quadratic_value", "elevation", "azimuth", "s_value"],
+        index=0
+    )
+    anim_start = st.number_input("Start value", value=0.0, step=0.01)
+    anim_end = st.number_input("End value", value=360.0, step=0.01)
+    increments = st.number_input("Number of Increments", min_value=1, value=25, step=1)
+    generate = st.button("Generate Animation")
+
+    if generate:
+        param_range = np.linspace(anim_start, anim_end, increments)
+        output_file = generate_gif_animation(param_to_animate, param_range, filename="streamlit_animation.gif", bounce=bounce)
+        with open(output_file, "rb") as f:
+            st.download_button("Download GIF", f, file_name="streamlit_animation.gif", mime="image/gif")
+        st.markdown(
+            f'<img src="data:image/gif;base64,{base64.b64encode(open(output_file, "rb").read()).decode()}" '
+            f'style="width:100%;" loop autoplay>',
+            unsafe_allow_html=True
+        )
+        # Convert GIF to MP4 and offer download
+        mp4_file = output_file.replace(".gif", ".mp4")
+        convert_gif_to_mp4(output_file, mp4_file)
+        with open(mp4_file, "rb") as fmp4:
+            st.download_button("Download MP4", fmp4, file_name="streamlit_animation.mp4", mime="video/mp4")
+
+    # --- Dual-Parameter Animation UI ---
+    st.markdown("### Dual-Parameter Animation")
+    available_params = ["theta_deg", "phi_deg", "epsilon", "quadratic_value", "elevation", "azimuth", "s_value"]
+    col1, col2 = st.columns(2)
+    with col1:
+        param1 = st.selectbox("Param 1", available_params, key="param1")
+        p1_start = st.number_input("Start 1", value=0.0, key="p1_start")
+        p1_end = st.number_input("End 1", value=360.0, key="p1_end")
+    with col2:
+        param2 = st.selectbox("Param 2", available_params, key="param2")
+        p2_start = st.number_input("Start 2", value=0.0, key="p2_start")
+        p2_end = st.number_input("End 2", value=1.0, key="p2_end")
+    increments = st.number_input("Number of Increments", min_value=1, value=25, step=1, key="increments")
+    generate2 = st.button("Generate Dual Animation")
+    if generate2:
+        p1_vals = np.linspace(p1_start, p1_end, increments)
+        p2_vals = np.linspace(p2_start, p2_end, increments)
+        param1_list = p1_vals
+        param2_list = p2_vals
+        output_file2 = generate_gif_double_param(param1, param2, param1_list, param2_list, filename="streamlit_dual_animation.gif", bounce=bounce)
+        with open(output_file2, "rb") as f:
+            st.download_button("Download Dual GIF", f, file_name="streamlit_dual_animation.gif", mime="image/gif")
+        st.markdown(
+            f'<img src="data:image/gif;base64,{base64.b64encode(open(output_file2, "rb").read()).decode()}" '
+            f'style="width:100%;" loop autoplay>',
+            unsafe_allow_html=True
+        )
+        # Convert dual GIF to MP4 and offer download
+        mp4_file2 = output_file2.replace(".gif", ".mp4")
+        convert_gif_to_mp4(output_file2, mp4_file2)
+        with open(mp4_file2, "rb") as fmp4_2:
+            st.download_button("Download Dual MP4", fmp4_2, file_name="streamlit_dual_animation.mp4", mime="video/mp4")
+
 st.pyplot(fig)
