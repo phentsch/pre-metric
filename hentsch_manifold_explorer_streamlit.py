@@ -120,7 +120,6 @@ plane_alpha = 0.1
 ell_resolution = 250
 cone_resolution = 25
 cone_transparency = 0.3
-wireframe_scale = 1 #if CFG["reorient_vertical"] else 0.86
 reorient_vertical = False
 field_canonical = 0
 field_shear = 0
@@ -205,7 +204,8 @@ def make_plot(
     show_axes_dict,
     quiver_normalize,
     uniform_quiver_seed,
-    upper_nape_only
+    upper_nape_only,
+    use_radial_coloring=False
 ):
     fig = plt.figure(figsize=CFG["figsize"], dpi=CFG["dpi"])
     ax = fig.add_subplot(111, projection='3d')
@@ -439,6 +439,7 @@ def make_plot(
     # --- Optional Features: Wireframe, Screen Planes, Vector Fields ---
     # Wireframe reference cone
     if show_wireframe:
+        wireframe_scale = 1 if reorient_vertical else np.sqrt(3)/2
         wire_r = np.linspace(0, z_bound_pos, 11)
         wire_theta = np.linspace(0, 2 * np.pi, 73)
         Rg, Tg = np.meshgrid(wire_r, wire_theta, indexing='ij')
@@ -578,7 +579,7 @@ def make_plot(
             ax.text(*angle_label_pos, r'$\theta = \tan^{-1}(\sqrt{2})$', fontsize=8, color='k')
 
     # 3D cone-preserving vector field
-    s_max = max(x_bound_pos, y_bound_pos, z_bound_pos)
+    s_max = max(x_bound_pos, y_bound_pos, z_bound_pos) if reorient_vertical else np.sqrt(3)/2 * max(x_bound_pos, y_bound_pos, z_bound_pos)
     v1 = np.array([1, -1, 0]) / np.sqrt(2)
     v2 = np.array([1, 1, -2]) / np.sqrt(6)
 
@@ -666,15 +667,28 @@ def make_plot(
         pts_rot = _rot(pts)
         vecs_rot = _rot(pts + vecs) - pts_rot
         mag = np.linalg.norm(vecs_rot, axis=1)
-        # Clean up invalid values in mag and vecs_rot
-        mag = np.nan_to_num(mag, nan=0.0, posinf=0.0, neginf=0.0)  # clean up invalid values
+        mag = np.nan_to_num(mag, nan=0.0, posinf=0.0, neginf=0.0)
         vecs_rot = np.nan_to_num(vecs_rot, nan=0.0, posinf=0.0, neginf=0.0)
-        norm_mag = mcolors.Normalize(vmin=mag.min(), vmax=mag.max() * 1.2)
+
+        if use_radial_coloring:
+            dot = np.sum(pts * vecs, axis=1)
+            norm_pos = np.linalg.norm(pts, axis=1)
+            norm_vec = np.linalg.norm(vecs, axis=1)
+            denom = np.where(norm_pos * norm_vec < 1e-12, 1e-12, norm_pos * norm_vec)
+            cosine_scalar = dot / denom
+            norm_metric = mcolors.Normalize(vmin=-1, vmax=1)
+            cmap = 'jet'
+            array = cosine_scalar
+        else:
+            norm_metric = mcolors.Normalize(vmin=mag.min(), vmax=mag.max() * 1.2)
+            cmap = field_cmap
+            array = mag
+
         ax.quiver(
             pts_rot[:, 0], pts_rot[:, 1], pts_rot[:, 2],
             vecs_rot[:, 0], vecs_rot[:, 1], vecs_rot[:, 2],
             length=0.1 * z_bound_pos, normalize=quiver_normalize, arrow_length_ratio=0.4,
-            cmap=field_cmap, norm=norm_mag, array=mag,
+            cmap=cmap, norm=norm_metric, array=array,
             linewidth=0.8, alpha=0.9)
 
     # --- Visualise W₁, W₂, W₃ at the same quiver sample points ---------
@@ -786,6 +800,7 @@ with st.sidebar.expander("**Vector Fields**", expanded=True):
     # show_vectors3d = st.checkbox("Show Field Vectors", value=True)
     quiver_normalize = st.checkbox("Normalize Quiver Vectors", value=False)
     upper_nape_only = st.checkbox("Show Upper Nape Only (ℓ ≥ 0)", value=False)
+    use_radial_coloring = st.checkbox("Color by radial alignment", value=False)
     show_canonical_vector_field = st.checkbox("Canonical Field Vectors", value=False)
     show_shear_vector_field = st.checkbox("Shear Field Vectors", value=False)
     # Indented basis‑choice checkboxes
@@ -825,6 +840,7 @@ fig = make_plot(
     quiver_normalize=quiver_normalize,
     uniform_quiver_seed=uniform_quiver_seed,
     upper_nape_only=upper_nape_only,
+    use_radial_coloring=use_radial_coloring,
 )
 if 'mag' in locals():
     # Optionally warn if there were invalid or extreme values
@@ -874,6 +890,7 @@ def generate_gif_animation(
                 "quiver_normalize": quiver_normalize,
                 "uniform_quiver_seed": uniform_quiver_seed,
                 "upper_nape_only": upper_nape_only,
+                "use_radial_coloring": use_radial_coloring,
             }
             kwargs[param_name] = val
             fig = make_plot(**kwargs)
@@ -943,6 +960,7 @@ def generate_gif_double_param(
                 "quiver_normalize": quiver_normalize,
                 "uniform_quiver_seed": uniform_quiver_seed,
                 "upper_nape_only": upper_nape_only,
+                "use_radial_coloring": use_radial_coloring,
             }
             kwargs[param1_name] = val1
             kwargs[param2_name] = val2
