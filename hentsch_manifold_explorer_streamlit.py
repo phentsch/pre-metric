@@ -796,7 +796,7 @@ with st.sidebar.expander("**Vector Fields**", expanded=True):
     epsilon = st.slider("Shear Strength ε", -4.0, 4.0, value=3/(2*np.sqrt(6)), step=0.01)
     st.markdown("### Options")
     uniform_quiver_seed = st.checkbox("Use uniform quiver seeding", value=True)
-    quiver_num = st.slider("Quiver Density", 12, 4320, value=432, step=12)
+    quiver_num = st.slider("Quiver Density", 12, 4320, value=2160, step=12)
     # show_vectors3d = st.checkbox("Show Field Vectors", value=True)
     quiver_normalize = st.checkbox("Normalize Quiver Vectors", value=False)
     upper_nape_only = st.checkbox("Show Upper Nape Only (ℓ ≥ 0)", value=False)
